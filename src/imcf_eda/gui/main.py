@@ -1,7 +1,8 @@
-from qtpy.QtWidgets import  QWidget, QGridLayout, QPushButton, QLabel
-from imcf_eda.gui._qt_classes import QWidgetRestore, QMainWindowRestore, set_dark, set_eda
-from pymmcore_widgets import (LiveButton, StageWidget, MDAWidget, GroupPresetTableWidget,
-                              ExposureWidget)
+from qtpy.QtWidgets import QWidget, QGridLayout, QPushButton, QLabel
+from imcf_eda.gui._qt_classes import (QMainWindowRestore,
+                                      set_dark, set_eda)
+from pymmcore_widgets import (LiveButton, StageWidget, MDAWidget,
+                              GroupPresetTableWidget, ExposureWidget)
 OBJECTIVES = {
     "100x": "6-Plan Apo 100x NA 1.45 Oil",
     "60x":  "5-Plan Apo 60x NA 1.42 Oil",
@@ -38,6 +39,12 @@ class MainWindow(QMainWindowRestore):
         self.group_presets = GroupPresetTableWidget(mmcore=mmc)
         self.overview = MDAWidget(mmcore=mmc)
         self.overview.control_btns.hide()
+        self.overview.tab_wdg.setTabEnabled(0, False)
+        self.overview.tab_wdg._cboxes[0].hide()
+        self.overview.tab_wdg.setTabEnabled(1, False)
+        self.overview.tab_wdg._cboxes[1].hide()
+        self.overview.tab_wdg.setTabEnabled(3, False)
+        self.overview.tab_wdg._cboxes[3].hide()
         self.overview.setWindowTitle("Overview")
         self.overview.show()
 
@@ -61,7 +68,7 @@ class MainWindow(QMainWindowRestore):
         self.main.layout().addWidget(self.overview_button, 4, 0)
         self.main.layout().addWidget(self.scan_button, 5, 0)
 
-        #Stages
+        # Stages
         self.main.layout().addWidget(self.psf_offset, 0, 1, 3, 1)
         self.main.layout().addWidget(self.xy, 0, 2, 3, 1)
 
@@ -74,18 +81,18 @@ class MainWindow(QMainWindowRestore):
 
 if __name__ == "__main__":
     from qtpy.QtWidgets import QApplication
-    app = QApplication([]) 
+    app = QApplication([])
     set_dark(app)
     from pymmcore_plus import CMMCorePlus
-    
+
     mmc = CMMCorePlus.instance()
 
-    # try:
-    from imcf_eda.convenience import init_microscope
-    from imcf_eda.model import SETTINGS
-    init_microscope(mmc, SETTINGS)
-
-    # mmc.loadSystemConfiguration()
+    try:
+        from imcf_eda.convenience import init_microscope
+        from imcf_eda.model import SETTINGS
+        init_microscope(mmc, SETTINGS)
+    except:
+        mmc.loadSystemConfiguration()
 
     window = MainWindow(mmc)
     window.show()
