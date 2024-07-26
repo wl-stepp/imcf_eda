@@ -1,8 +1,8 @@
 import numpy as np
 from vispy import scene, visuals
 from vispy.scene.visuals import Rectangle
-from polygon_canvas import InteractiveCanvas
-from overview_fov import find_fovs
+from imcf_eda.gui.polygon_canvas import InteractiveCanvas
+from imcf_eda.gui.overview_fov import find_fovs
 
 
 
@@ -48,6 +48,7 @@ class Overview(InteractiveCanvas):
                 rect = Rectangle(center=fov + (250, 250), border_color="white", width=500, height=500,
                                             parent=self.view.scene, color=None)
                 self.rects.append(rect)
+
 
     def on_key_press(self, event):
         print(f"Key pressed: {event.key}")

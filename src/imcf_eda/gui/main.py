@@ -37,28 +37,6 @@ class MainWindow(QMainWindowRestore):
             self.xy = StageWidget("XY")
 
         self.group_presets = GroupPresetTableWidget(mmcore=mmc)
-        self.overview = MDAWidget(mmcore=mmc)
-        self.overview.control_btns.hide()
-        self.overview.tab_wdg.setTabEnabled(0, False)
-        self.overview.tab_wdg._cboxes[0].hide()
-        self.overview.tab_wdg.setTabEnabled(1, False)
-        self.overview.tab_wdg._cboxes[1].hide()
-        self.overview.tab_wdg.setTabEnabled(3, False)
-        self.overview.tab_wdg._cboxes[3].hide()
-        self.overview.setWindowTitle("Overview")
-        self.overview.show()
-
-        self.group_presets = GroupPresetTableWidget(mmcore=mmc)
-        self.mda_1 = MDAWidget(mmcore=mmc)
-        self.mda_1.control_btns.hide()
-        self.mda_1.setWindowTitle("Scan")
-        self.mda_1.show()
-
-        self.mda_2 = MDAWidget(mmcore=mmc)
-        self.mda_2.control_btns.hide()
-        self.mda_2.setWindowTitle("Acquisition")
-        set_eda(self.mda_2)
-        self.mda_2.show()
 
         self.main.setLayout(QGridLayout())
         self.main.layout().addWidget(self.live_button, 0, 0)
@@ -100,5 +78,6 @@ if __name__ == "__main__":
     from imcf_eda.gui._preview import Preview
     preview = Preview(mmcore=mmc)
     preview.show()
+
 
     app.exec_()
