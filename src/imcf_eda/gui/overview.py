@@ -1,8 +1,8 @@
 import numpy as np
 from vispy import scene, visuals
 from vispy.scene.visuals import Rectangle
-from polygon_canvas import InteractiveCanvas
-from overview_fov import find_fovs
+from imcf_eda.gui.polygon_canvas import InteractiveCanvas
+from imcf_eda.gui.overview_fov import find_fovs
 
 HELP_TEXT = '''Double click: Add point
 Enter: calculate FOVs
@@ -80,6 +80,7 @@ class Overview(InteractiveCanvas):
                                  height=self.fov_size, parent=self.view.scene, color=None)
                 self.rects.append(rect)
             self.fovs.append(fovs)
+
     def on_key_press(self, event):
         print(f"Key pressed: {event.key}")
         if event.key == 'Enter':
