@@ -1,75 +1,70 @@
+from pymmcore_plus import CMMCorePlus
+from typing import Annotated, Literal
+from dataclasses import dataclass, field
+from magicgui.experimental import guiclass
 import useq
 
 
-DEMO_SETTINGS = {
-    "min_border_distance": 10,
-    "analyse_channel" : "FITC",
-    "mm_config": False,
-    "objective_1": "5-Plan Apo 60x NA 1.42 Oil",
-    "objective_2": "6-Plan Apo 100x NA 1.45 Oil",
-    "sequence_1": useq.MDASequence(
-            # stage_positions = [(0, 0)], # This will be overwritten with the current position
-            # channels = [useq.Channel(config="1-DAPI", group="3-Channel"), useq.Channel(config="3-Cy3", group="3-Channel")],
-            z_plan = {"range": 5, "step": 1},
-            grid_plan={"width": 1000, "height": 1000, "mode": "column_wise", "relative_to": "center"},
-            channels=[{'config': 'FITC'}, {'config': 'DAPI'},]
-                ),
-
-    "sequence_2": useq.MDASequence(z_plan = {"range": 5, "step": 1},
-                                   ),
-    "autofocus": False,
-    "save": "~/Desktop/imcf_eda"
-}
+@dataclass
+class DisplaySettings:
+    rotation: int = 270
+    flipud: bool = True
+    fliplr: bool = False
 
 
-SETTINGS = {
-    "mm_config": "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg",
-    "save": "F:/data/eda_data_027/",
+class ConfigSettings:
+    # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
+    mm_config: str | None = None
+    objective_group: str = "Objective"
+    objectives: tuple[str, ...] = ()
+    pixel_sizes: tuple[str, ...] = ()
+    display: DisplaySettings = field(default_factory=DisplaySettings)
 
-    "objective_1": "5-Plan Apo 60x NA 1.42 Oil",
-    "analyser": {"threshold": 0.1, "closing_kernel": (3, 3), "channel": "4-Cy5",
-                 "model_path": "F:/imcf_eda/models/unet2d_vish_v4/keras_weights.hdf5"},
-    "sequence_1": useq.MDASequence(
-            stage_positions = [(0, 0)], # This will be overwritten with the current position
-            channels = [useq.Channel(config="4-Cy5", group="3-Channel")],
-            z_plan = {"range": 30, "step": 0.3},
-            grid_plan={"width": 600, "height": 600, "mode": "column_wise", "relative_to": "center"},
-                ),
+    def __init__(self):
+        mmc = CMMCorePlus().instance()
+        if self.mm_config:
+            mmc.loadSystemConfiguration(self.mm_config)
+        else:
+            mmc.loadSystemConfiguration()
+        self.objectives = mmc.getAvailableConfigs(self.objective_group)
+        self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
 
-    "objective_2": "6-Plan Apo 100x NA 1.45 Oil",
-    "min_border_distance": 1,
-    "z_offset": 4.875,
-    "x_offset": -45,
-    "y_offset": -11,
-    "pixel_size_config": "100x", #('100x', '10x', '25x', '40x', '4x', '60x')
-    "sequence_2": useq.MDASequence(z_plan = {"range": 30, "step": 0.3},
-                                   channels = [useq.Channel(config="4-Cy5", group="3-Channel"),
-                                               useq.Channel(config="3-Cy3", group="3-Channel")],
-                                   ),
-    "autofocus": False,
-
-}
-
-
-from magicgui.experimental import guiclass
-
-from typing import Annotated, Literal
-OBJECTIVES = Literal["5-Plan Apo 60x NA 1.42 Oil", "6-Plan Apo 100x NA 1.45 Oil"]
 
 @guiclass
 class OverviewSettings:
-    objective: str = "4x"
+    objective:  Literal[
+        *ConfigSettings().objectives  # type:ignore
+    ] = ConfigSettings().objectives[-1]
+
+
+@dataclass
+class OverviewMDASettings:
+    parameters: OverviewSettings = field(default_factory=OverviewSettings)
+    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
+
 
 @guiclass
 class ScanSettings:
-    objective: OBJECTIVES = "5-Plan Apo 60x NA 1.42 Oil"
+    objective: Literal[
+        *ConfigSettings().objectives  # type:ignore
+    ] = ConfigSettings().objectives[-1]
+
+
+@dataclass
+class ScanMDASettings:
+    parameters: ScanSettings = field(default_factory=ScanSettings)
+    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
+
 
 @guiclass
 class AnalyserSettings:
     threshold: float = 0.1
     closing_kernel: int = 3
-    channel: str = "4-Cy5"
-    model_path: str = "F:/imcf_eda/models/unet2d_vish_v4/keras_weights.hdf5"
+    channel: str = "Cy5"
+    model_path: str = ("/home/stepp/Documents/Data/models_basel/"
+                       "unet2d_vish_v4/keras_weights.hdf5")
+    orientation: DisplaySettings = field(default_factory=DisplaySettings)
+
 
 @guiclass
 class AcquisitionSettings:
@@ -77,26 +72,46 @@ class AcquisitionSettings:
     z_offset: float = 4.875
     x_offset: Annotated[float, {'widget_type': "LineEdit"}] = -45.
     y_offset: Annotated[float, {'widget_type': "LineEdit"}] = -11.
-    pixel_size_config: str = "100x" #('100x', '10x', '25x', '40x', '4x', '60x')
-    objective: OBJECTIVES = "6-Plan Apo 100x NA 1.45 Oil"
+    # ('100x', '10x', '25x', '40x', '4x', '60x')
+    pixel_size_config: Literal[
+        *ConfigSettings().pixel_sizes  # type:ignore
+    ] = ConfigSettings().pixel_sizes[-1]
+
+    objective: Literal[
+        *ConfigSettings().objectives  # type:ignore
+    ] = ConfigSettings().objectives[-1]
     autofocus: bool = False
 
 
-
-# @dataclass
-@guiclass
-class SETTINGS:
-
-
-    mm_config: str = "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
-    save: str = "F:/data/eda_data_027/"
+@dataclass
+class AcquisitionMDASettings:
+    parameters: AcquisitionSettings = field(
+        default_factory=AcquisitionSettings)
+    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
 
 
+@dataclass
+class SaveInfo:
+    save_dir: str = "/home/stepp/Desktop/"
+    save_name: str = "eda_000"
+    format: str = "ome-zarr"
+    should_save: bool = True
+
+
+@dataclass
+class EDASettings:
+    config: ConfigSettings = field(default_factory=ConfigSettings)
+
+    overview: OverviewMDASettings = field(default_factory=OverviewMDASettings)
+    scan: ScanMDASettings = field(default_factory=ScanMDASettings)
+    analyser: AnalyserSettings = field(default_factory=AnalyserSettings)
+    acquisition: AcquisitionMDASettings = field(
+        default_factory=AcquisitionMDASettings)
+
+    save: SaveInfo = field(default_factory=SaveInfo)
 
 
 if __name__ == "__main__":
     from qtpy.QtWidgets import QApplication
     app = QApplication([])
-    obj = SETTINGS()
-    obj.gui.show()
-    app.exec_()
+    app.exec_()  # type:ignore

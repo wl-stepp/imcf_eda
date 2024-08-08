@@ -1,3 +1,5 @@
+from imcf_eda.model import AcquisitionSettings
+from pulp import LpMinimize, LpProblem, LpVariable, lpSum, LpBinary
 import numpy as np
 
 
@@ -18,7 +20,8 @@ def cover_with_squares(points, square_size):
                 (x - square_size / 2, y - square_size / 2),
                 (x - square_size / 2, y + square_size / 2 - square_size),
                 (x + square_size / 2 - square_size, y - square_size / 2),
-                (x + square_size / 2 - square_size, y + square_size / 2 - square_size)
+                (x + square_size / 2 - square_size,
+                 y + square_size / 2 - square_size)
             ]
 
             for cx, cy in candidates:
@@ -26,7 +29,8 @@ def cover_with_squares(points, square_size):
                                     if cx <= px < cx + square_size and cy <= py < cy + square_size)
                 if current_cover:
                     min_distance_to_border = min(
-                        min(px - cx, cx + square_size - px, py - cy, cy + square_size - py)
+                        min(px - cx, cx + square_size - px,
+                            py - cy, cy + square_size - py)
                         for px, py in current_cover)
 
                     if min_distance_to_border > max_min_distance_to_border:
@@ -39,6 +43,7 @@ def cover_with_squares(points, square_size):
         uncovered_points -= best_cover
     plot_squares(points, square_size, squares)
     return squares
+
 
 def cover_with_squares_max_distance(points, square_size):
     points = np.array(points)
@@ -64,7 +69,8 @@ def cover_with_squares_max_distance(points, square_size):
                                 if cx <= px < cx + square_size and cy <= py < cy + square_size)
             if current_cover:
                 min_distance_to_border = min(
-                    min(px - cx, cx + square_size - px, py - cy, cy + square_size - py)
+                    min(px - cx, cx + square_size - px,
+                        py - cy, cy + square_size - py)
                     for px, py in current_cover)
 
                 if min_distance_to_border > max_min_distance_to_border:
@@ -78,6 +84,7 @@ def cover_with_squares_max_distance(points, square_size):
             uncovered_points -= best_cover
     plot_squares(points, square_size, squares)
     return squares
+
 
 def cover_with_squares_min_distance(points, square_size):
     points = np.array(points)
@@ -106,7 +113,6 @@ def cover_with_squares_min_distance(points, square_size):
     return squares
 
 
-from pulp import LpMinimize, LpProblem, LpVariable, lpSum, LpBinary
 def cover_with_squares_ilp(points, square_size, plot=False):
     points = np.array(points)
     min_x, min_y = np.min(points, axis=0)
@@ -135,17 +141,17 @@ def cover_with_squares_ilp(points, square_size, plot=False):
     prob.solve()
 
     # Extract the positions of the placed squares
-    solution = [(x, y) for x in grid_x for y in grid_y if square_vars[x][y].varValue == 1]
+    solution = [(x, y)
+                for x in grid_x for y in grid_y if square_vars[x][y].varValue == 1]
     if plot:
         plot_squares(points, square_size, solution)
     return solution
 
 
-from imcf_eda.model import SETTINGS
 def plot_squares(points, square_size, squares):
     import matplotlib.pyplot as plt
     plt.scatter(*zip(*points), c='blue', label='Points')
-    offset = SETTINGS["min_border_distance"]
+    offset = AcquisitionSettings().min_border_distance
     for (x, y) in squares:
         plt.gca().add_patch(plt.Rectangle((x-offset, y-offset),
                                           square_size + offset*2, square_size + offset*2,

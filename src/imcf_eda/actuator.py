@@ -1,63 +1,73 @@
 from pathlib import Path
-import json
 
 from useq import MDASequence
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import handlers, mda_listeners_connected
 from imcf_eda.events import EventHub
+from imcf_eda.model import EDASettings
 
 
 class SpatialActuator():
-    def __init__(self, mmc:CMMCorePlus, event_hub: EventHub,
-                       settings: dict, analyser, interpreter, **kwargs):
+    def __init__(self, mmc: CMMCorePlus, event_hub: EventHub,
+                 settings: EDASettings, analyser, interpreter):
         self.mmc = mmc
         self.event_hub = event_hub
-        self.sequence: MDASequence = settings['sequence_1']
+        self.sequence: MDASequence = settings.scan.mda
         self.settings = settings
         self.analyser = analyser
         self.interpreter = interpreter
 
+        self.orig_pos = self.mmc.getXYPosition()
+        self.orig_pos_z = self.mmc.getPosition()
+
+        self.save_dir = Path(self.settings.save.save_dir) / \
+            self.settings.save.save_name
+
         self.sequence_2 = None
-        self.writer = handlers.OMEZarrWriter(Path(self.settings["save"]) / "acquisition.ome.zarr", overwrite=True)
+        self.writer = handlers.OMEZarrWriter(self.save_dir /
+                                             "acquisition.ome.zarr",
+                                             overwrite=True)
         self.event_hub.new_sequence_2.connect(self.new_sequence_2)
 
     def start(self):
-        # try:
-        self.mmc.setConfig("4-Objective", self.settings["objective_1"])
-        orig_pos = self.mmc.getXYPosition()
-        orig_pos_z = self.mmc.getPosition()
+        self.scan()
+        self.disconnect_eda()
+        self.acquire()
+        self.mmc.setPosition(self.orig_pos_z)
+        self.mmc.setXYPosition(self.orig_pos[0], self.orig_pos[1])
 
-        self.sequence = self.settings["sequence_1"].replace(stage_positions = [(*orig_pos, orig_pos_z)])
-        # self.sequence = MDASequence().model_validate(position_sequence.model_copy(update=self.settings["sequence_1"].model_dump(exclude="stage_positions")).model_dump())
-        # except:
-        #     print("Acquisition setup failed!!!")
+    def scan(self):
+        self.orig_pos = self.mmc.getXYPosition()
+        self.orig_pos_z = self.mmc.getPosition()
+        self.mmc.setConfig(self.settings.config.objective_group,
+                           self.settings.scan.parameters.objective)
+        self.sequence = self.settings.scan.mda
+
         self.mmc.run_mda(self.sequence, block=True)
-        with open(Path(self.settings['save']) / "scan.ome.zarr/eda_seq.json", "w") as file:
+        with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
             file.write(self.sequence.model_dump_json())
 
+    def acquire(self):
+        self.mmc.setConfig(self.settings.config.objective_group,
+                           self.settings.acquisition.parameters.objective)
         while not self.sequence_2:
             pass
-        # Disconnect the analyser and interpreter from the first sequence
-        self.mmc.mda.events.frameReady.disconnect(self.analyser.frameReady)
-        self.mmc.mda.events.sequenceStarted.disconnect(self.analyser.sequenceStarted)
-        self.mmc.mda.events.sequenceFinished.disconnect(self.analyser.sequenceFinished)
-        self.mmc.mda.events.sequenceFinished.disconnect(self.interpreter.sequenceFinished)
-
-        try:
-            self.mmc.setConfig("4-Objective", self.settings["objective_2"])
-        except:
-            print("Objective switch failed!!!")
-
-        self.mmc.setPosition(orig_pos_z)
-        self.mmc.setXYPosition(orig_pos[0], orig_pos[1])
-
-
         with mda_listeners_connected(self.writer):
             self.mmc.mda.run(self.sequence_2)
-        with open(Path(self.settings['save']) / "acquisition.ome.zarr/eda_seq.json", "w") as file:
+        with open(self.save_dir / "acquisition.ome.zarr/eda_seq.json",
+                  "w") as file:
             file.write(self.sequence_2.model_dump_json())
-        self.mmc.setPosition(orig_pos_z)
-        self.mmc.setXYPosition(orig_pos[0], orig_pos[1])
+        self.sequence_2 = None
+
+    def disconnect_eda(self):
+        # Disconnect the analyser and interpreter from the first sequence
+        self.mmc.mda.events.frameReady.disconnect(self.analyser.frameReady)
+        self.mmc.mda.events.sequenceStarted.disconnect(
+            self.analyser.sequenceStarted)
+        self.mmc.mda.events.sequenceFinished.disconnect(
+            self.analyser.sequenceFinished)
+        self.mmc.mda.events.sequenceFinished.disconnect(
+            self.interpreter.sequenceFinished)
 
     def new_sequence_2(self, sequence: MDASequence):
         self.sequence_2 = sequence
