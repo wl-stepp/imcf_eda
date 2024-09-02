@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 packages = find_packages()
 
-print(packages)
+print("PACKAGES", packages)
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
@@ -24,8 +24,8 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
-    packages=packages,
-    package_data={"": ["settings.json", "utility/*.jar", "utility/models/*"]},
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     include_package_data=True,
     install_requires=[
         'useq-schema',
@@ -37,7 +37,7 @@ setup(
         'pyqt5': ['PyQt5'],
         'pyqt6': ['PyQt6'],
         'test': ['pytest', 'pytest-qt'],
-        },
+    },
     author="Willi L. Stepp",
     author_email="willi.stepp@epfl.ch",
     python_requires=">=3.10",

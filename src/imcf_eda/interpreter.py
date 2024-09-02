@@ -24,7 +24,7 @@ class PositionInterpreter():
 
         self.event_hub = event_hub
         self.event_hub.new_positions.connect(self.new_positions)
-        self.event_hub.analysis_finished.connect(self.analysis_finished)
+        # self.event_hub.analysis_finished.connect(self.analysis_finished)
 
     def new_positions(self, positions: list):
         for position in positions:
@@ -37,12 +37,11 @@ class PositionInterpreter():
                              self.mmc.getImageHeight() *
                              self.mmc.getPixelSizeUm()/2)
             self.positions.append(position)
-        print("New positions received:", positions)
 
-    def sequenceFinished(self):
-        if not self.is_analysis_finished:
-            t = Timer(5, self.sequenceFinished)
-            t.start()
+    def interpret(self):
+        #     if not self.is_analysis_finished:
+        #         t = Timer(5, self.sequenceFinished)
+        #         t.start()
         print("Sequence finished, analysis finished")
         with open(self.save_dir / "positions.csv", "w", newline='') as file:
             csv_pos = [[i, pos['x'],  pos['y']]
@@ -53,7 +52,7 @@ class PositionInterpreter():
         print("OPTIMIZING POSITIONS...")
         pos = [[i['x'] for i in self.positions], [i['y']
                                                   for i in self.positions]]
-        print("Positions:", pos)
+        print("Positions:", len(pos))
         fov_size = self.mmc.getPixelSizeUmByID(
             self.settings.pixel_size_config)*self.mmc.getImageWidth()
         print("FOV", fov_size)
@@ -75,22 +74,15 @@ class PositionInterpreter():
             write.writerow(['index', 'axis-0', 'axis-1'])
             write.writerows(csv_squares)
 
-        # squares = [(i[0], i[1], z) for i in squares]
-        # squares = [(i['x'] + self.settings['x_offset'], i['y'] +
-        #            self.settings['y_offset'], z) for i in self.positions]
         squares = [(i[0] + self.settings.x_offset, i[1] +
                     self.settings.y_offset, z) for i in squares]
         print("IMAGING AT:", squares)
+        print(self.mda.model_dump_json())
         new_sequence = self.mda.replace(stage_positions=squares)
         print("New sequence:", new_sequence)
+
+        return new_sequence
         self.event_hub.new_sequence_2.emit(new_sequence)
 
-    def analysis_finished(self):
-        self.is_analysis_finished = True
-        print("ANALYSIS FINISHED")
-
-    def connect(self):
-        self.mmc.mda.events.sequenceFinished.connect(self.sequenceFinished)
-
-    def disconnect(self):
-        self.mmc.mda.events.sequenceFinished.disconnect(self.sequenceFinished)
+    # def analysis_finished(self):
+    #     self.is_analysis_finished = True

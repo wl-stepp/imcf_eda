@@ -1,0 +1,16 @@
+useq-schema
+numpy
+pymmcore-plus
+
+[ilp]
+pulp
+
+[pyqt5]
+PyQt5
+
+[pyqt6]
+PyQt6
+
+[test]
+pytest
+pytest-qt

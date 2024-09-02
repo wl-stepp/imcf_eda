@@ -2,6 +2,7 @@ from qtpy.QtWidgets import (QTabWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QWidget)
 from qtpy.QtCore import Signal  # type:ignore
 from qtpy.QtGui import QFont
+from useq import MDASequence
 
 from imcf_eda.gui._qt_classes import QWidgetRestore, set_dark
 from imcf_eda.gui.overview import Overview
@@ -10,6 +11,7 @@ from pymmcore_widgets.mda._save_widget import SaveGroupBox
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.model import (EDASettings, OverviewMDASettings, ScanMDASettings,
                             AcquisitionMDASettings)
+from imcf_eda.events import EventHub
 from dataclasses import asdict
 
 
@@ -77,8 +79,9 @@ class ScanGUI(QWidget):
 
 class AcquisitionGUI(QWidget):
     def __init__(self,
-                 mmc: CMMCorePlus,
-                 settings: AcquisitionMDASettings | None = None):
+                 mmc: CMMCorePlus, event_hub: EventHub,
+                 settings: AcquisitionMDASettings | None = None,
+                 ):
         super().__init__()
         self.setObjectName("AcquisitionTab")
         self.lay = QVBoxLayout()
@@ -93,6 +96,7 @@ class AcquisitionGUI(QWidget):
         self.mda.tab_wdg.setTabEnabled(0, False)
         self.mda.tab_wdg._cboxes[0].hide()  # time
         self.mda.valueChanged.connect(self.update_mda)
+
         self.lay.addWidget(self.mda)
 
         self.mda.setValue(self.settings.mda)
@@ -102,6 +106,7 @@ class AcquisitionGUI(QWidget):
         self.acq_btn = QPushButton("⏵ Acquire")
         self.acq_btn.setFont(QFont('Sans Serif', 16))
         self.lay.addWidget(self.acq_btn)
+        self.event_hub = event_hub
 
     def update_mda(self):
         self.settings.mda = self.mda.value()
@@ -109,7 +114,8 @@ class AcquisitionGUI(QWidget):
 
 class EDAGUI(QWidgetRestore):
     def __init__(self, mmc: CMMCorePlus,
-                 settings: EDASettings, parent=None):
+                 settings: EDASettings, event_hub: EventHub,
+                 parent=None):
         super().__init__(parent)
 
         self.mmc = mmc
@@ -120,11 +126,10 @@ class EDAGUI(QWidgetRestore):
         self.save_info.setValue(asdict(settings.save))
 
         self.overview = OverviewGUI(mmc, settings.overview)
-        self.overview.button.pressed.connect(self.run_overview)
 
         self.scan = ScanGUI(mmc, settings.scan)
 
-        self.acquisition = AcquisitionGUI(mmc, settings.acquisition)
+        self.acquisition = AcquisitionGUI(mmc, event_hub, settings.acquisition)
 
         self.print_btn = QPushButton("Print Settings")
         self.print_btn.pressed.connect(self.print_settings)
@@ -144,19 +149,6 @@ class EDAGUI(QWidgetRestore):
     def print_settings(self):
         from pprint import pprint
         pprint(self.settings)
-
-    def run_overview(self):
-        overview_mda = self.overview.mda.value()
-        # TODO make sure obj is set
-        self.mmc.run_mda(overview_mda)
-        self.fov_select = QOverview()
-        self.fov_select.new_fovs.connect(self.rcv_fovs)
-
-    def rcv_fovs(self, fovs):
-        print("FOVs received in EDA GUI")
-        scan_mda = self.scan.mda.value()
-        scan_mda = scan_mda.replace(stage_positions=fovs)
-        self.scan.mda.setValue(scan_mda)
 
 
 class QOverview(QWidgetRestore):
@@ -181,6 +173,7 @@ if __name__ == "__main__":
     from qtpy.QtWidgets import QApplication
     app = QApplication([])
     from pymmcore_plus import CMMCorePlus
+
     set_dark(app)
     mmc = CMMCorePlus.instance()
     mmc.loadSystemConfiguration()

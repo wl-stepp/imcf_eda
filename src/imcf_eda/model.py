@@ -5,7 +5,7 @@ from magicgui.experimental import guiclass
 import useq
 
 
-@dataclass
+@guiclass
 class DisplaySettings:
     rotation: int = 270
     flipud: bool = True
@@ -63,7 +63,9 @@ class AnalyserSettings:
     channel: str = "Cy5"
     model_path: str = ("/home/stepp/Documents/Data/models_basel/"
                        "unet2d_vish_v4/keras_weights.hdf5")
-    orientation: DisplaySettings = field(default_factory=DisplaySettings)
+
+    def __post_init__(self):
+        self.orientation: DisplaySettings = DisplaySettings()
 
 
 @guiclass
