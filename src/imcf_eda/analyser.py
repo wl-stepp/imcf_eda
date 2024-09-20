@@ -65,7 +65,7 @@ class MIPAnalyser():
                                self.mmc.getImageWidth()), dtype=np.uint16)
 
     def sequenceFinished(self):
-        self.writer.sequenceFinished(self.sequence, self.metadata)
+        self.writer.sequenceFinished(self.sequence)
 
     def analyse(self):
         self.net_writer = handlers.OMEZarrWriter(

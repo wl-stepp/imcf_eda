@@ -59,6 +59,7 @@ class Controller(QObject):
     def dual_scan(self):
         self.scan_finished.connect(self.analyse_thr)
         self.analysis_finished.connect(self.acquire_thr)
+
         self.scan_thr()
 
         self.view.tabs.setCurrentIndex(2)
