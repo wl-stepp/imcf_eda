@@ -52,7 +52,7 @@ class PositionInterpreter():
         print("OPTIMIZING POSITIONS...")
         pos = [[i['x'] for i in self.positions], [i['y']
                                                   for i in self.positions]]
-        print("Positions:", len(pos))
+        print("Positions:", len(pos[0]))
         fov_size = self.mmc.getPixelSizeUmByID(
             self.settings.pixel_size_config)*self.mmc.getImageWidth()
         print("FOV", fov_size)
@@ -74,15 +74,13 @@ class PositionInterpreter():
             write.writerow(['index', 'axis-0', 'axis-1'])
             write.writerows(csv_squares)
 
-        squares = [(i[0] + self.settings.x_offset, i[1] +
-                    self.settings.y_offset, z) for i in squares]
-        print("IMAGING AT:", squares)
+        squares = [(i[0] + float(self.settings.x_offset), i[1] +
+                    float(self.settings.y_offset), z) for i in squares]
+        print(f"IMAGING AT {len(squares)} positions:", squares)
         print(self.mda.model_dump_json())
         new_sequence = self.mda.replace(stage_positions=squares)
-        print("New sequence:", new_sequence)
 
         return new_sequence
-        self.event_hub.new_sequence_2.emit(new_sequence)
 
     # def analysis_finished(self):
     #     self.is_analysis_finished = True

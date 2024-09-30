@@ -9,7 +9,8 @@
             "type": "debugpy",
             "request": "launch",
             "cwd": "f:/imcf_eda/src",
-            "module": "imcf_eda.run"
+            "module": "imcf_eda.run",
+            "justMyCode": false,
         }
     ]
 }

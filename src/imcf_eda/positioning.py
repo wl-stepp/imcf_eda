@@ -112,37 +112,58 @@ def cover_with_squares_min_distance(points, square_size):
 
     return squares
 
-
+import time
 def cover_with_squares_ilp(points, square_size, plot=False):
+    t0 = time.perf_counter()
+    
+    # Convert points to numpy array for vectorized operations
     points = np.array(points)
+    
+    # Determine the bounding box for the points
     min_x, min_y = np.min(points, axis=0)
     max_x, max_y = np.max(points, axis=0)
-
+    
+    print("Time to compute bounds:", time.perf_counter() - t0)
+    
     # Define the ILP problem
+    print("Defining problem...")
     prob = LpProblem("MinimizeSquares", LpMinimize)
-
-    # Define the grid of potential square positions
-    step = square_size / 100
-    grid_x = np.arange(min_x, max_x + step, step)
-    grid_y = np.arange(min_y, max_y + step, step)
-
-    # Create binary variables for each potential square position
+    
+    print("Time after defining problem:", time.perf_counter() - t0)
+    
+    # Define the grid of potential square positions, but only within the bounds of the points with some padding
+    padding = square_size  # You can adjust the padding as needed
+    grid_x = np.arange(min_x - padding, max_x + padding, square_size)
+    grid_y = np.arange(min_y - padding, max_y + padding, square_size)
+    
+    print("Time after making grid:", time.perf_counter() - t0)
+    
+    # Create binary variables for each potential square position, but only include squares within the padded bounds
     square_vars = LpVariable.dicts("Square", (grid_x, grid_y), cat=LpBinary)
-
-    # Objective: minimize the number of squares used
+    
+    # Objective: minimize the number of squares used, but only include squares near the points
     prob += lpSum(square_vars[x][y] for x in grid_x for y in grid_y)
-
+    
+    print("Time after defining objective:", time.perf_counter() - t0)
+    
     # Constraints: each point must be covered by at least one square
     for px, py in points:
-        prob += lpSum(square_vars[x][y] for x in grid_x for y in grid_y
-                      if x <= px < x + square_size and y <= py < y + square_size) >= 1
-
+        # Precompute the potential grid squares that could cover the point (px, py)
+        possible_x = grid_x[(grid_x <= px) & (grid_x + square_size > px)]
+        possible_y = grid_y[(grid_y <= py) & (grid_y + square_size > py)]
+        
+        # Add a constraint that the point must be covered by at least one square
+        prob += lpSum(square_vars[x][y] for x in possible_x for y in possible_y) >= 1
+    print(time.perf_counter() - t0)
     # Solve the problem
+    print("Solve...")
     prob.solve()
-
+    print(time.perf_counter() - t0)
+    print("Squares to positions...")
     # Extract the positions of the placed squares
     solution = [(x, y)
                 for x in grid_x for y in grid_y if square_vars[x][y].varValue == 1]
+    print(time.perf_counter() - t0)
     if plot:
         plot_squares(points, square_size, solution)
     return solution

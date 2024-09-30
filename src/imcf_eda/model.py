@@ -14,9 +14,11 @@ class DisplaySettings:
 
 class ConfigSettings:
     # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
-    mm_config: str | None = None
-    objective_group: str = "Objective"
+    mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
+    objective_group: str = "4-Objective"
+    channel_group: str = "3-Channel"
     objectives: tuple[str, ...] = ()
+    channels: tuple[str, ...] = ()
     pixel_sizes: tuple[str, ...] = ()
     display: DisplaySettings = field(default_factory=DisplaySettings)
 
@@ -27,14 +29,21 @@ class ConfigSettings:
         else:
             mmc.loadSystemConfiguration()
         self.objectives = mmc.getAvailableConfigs(self.objective_group)
+        self.channels = mmc.getAvailableConfigs(self.channel_group)
         self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
 
+
+settings = ConfigSettings()
+objectives = settings.objectives
+pixel_sizes = settings.pixel_sizes
+channels = settings.channels
 
 @guiclass
 class OverviewSettings:
     objective:  Literal[
-        *ConfigSettings().objectives  # type:ignore
-    ] = ConfigSettings().objectives[-1]
+        objectives  # type:ignore
+    ] = settings.objectives[1]
+
 
 
 @dataclass
@@ -46,8 +55,9 @@ class OverviewMDASettings:
 @guiclass
 class ScanSettings:
     objective: Literal[
-        *ConfigSettings().objectives  # type:ignore
-    ] = ConfigSettings().objectives[-1]
+        objectives  # type:ignore
+    ] = settings.objectives[-2]
+    preview_channel: Literal[channels] = settings.channels[0]
 
 
 @dataclass
@@ -60,8 +70,8 @@ class ScanMDASettings:
 class AnalyserSettings:
     threshold: float = 0.1
     closing_kernel: int = 3
-    channel: str = "Cy5"
-    model_path: str = ("/home/stepp/Documents/Data/models_basel/"
+    channel: Literal[channels] = settings.channels[4]
+    model_path: str = ("F:/imcf_eda/models/"
                        "unet2d_vish_v4/keras_weights.hdf5")
 
     def __post_init__(self):
@@ -71,17 +81,17 @@ class AnalyserSettings:
 @guiclass
 class AcquisitionSettings:
     min_border_distance: float = 1.
-    z_offset: float = 4.875
-    x_offset: Annotated[float, {'widget_type': "LineEdit"}] = -45.
-    y_offset: Annotated[float, {'widget_type': "LineEdit"}] = -11.
+    z_offset: float = 2.72
+    x_offset: Annotated[float, {'widget_type': "LineEdit"}] = -23.
+    y_offset: Annotated[float, {'widget_type': "LineEdit"}] = 2.
     # ('100x', '10x', '25x', '40x', '4x', '60x')
     pixel_size_config: Literal[
-        *ConfigSettings().pixel_sizes  # type:ignore
-    ] = ConfigSettings().pixel_sizes[-1]
+        pixel_sizes  # type:ignore
+    ] = settings.pixel_sizes[0]
 
     objective: Literal[
-        *ConfigSettings().objectives  # type:ignore
-    ] = ConfigSettings().objectives[-1]
+        objectives  # type:ignore
+    ] = settings.objectives[-1]
     autofocus: bool = False
 
 
@@ -94,8 +104,8 @@ class AcquisitionMDASettings:
 
 @dataclass
 class SaveInfo:
-    save_dir: str = "/home/stepp/Desktop/"
-    save_name: str = "eda_000"
+    save_dir: str = "F:/data"
+    save_name: str = "2409_015"
     format: str = "ome-zarr"
     should_save: bool = True
 

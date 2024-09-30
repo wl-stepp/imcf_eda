@@ -38,8 +38,7 @@ class Preview(QWidgetRestore):
 
         self.preview = Canvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
                               mirror_y=self.mirror_y, parent=self)
-        self._mmc.events.imageSnapped.connect(self.preview._on_image_snapped)
-        self._mmc.events.imageSnapped.connect(self.new_frame)
+        self.mmc_connect()
 
         self.setWindowTitle("Preview")
         self.setLayout(QGridLayout())
@@ -109,6 +108,13 @@ class Preview(QWidgetRestore):
                                  "mirror_y": False}
         return settings_dict
 
+    def mmc_connect(self):
+        self._mmc.events.imageSnapped.connect(self.preview._on_image_snapped)
+        self._mmc.events.imageSnapped.connect(self.new_frame)
+
+    def mmc_disconnect(self):
+        self._mmc.events.imageSnapped.disconnect(self.preview._on_image_snapped)
+        self._mmc.events.imageSnapped.disconnect(self.new_frame)
 
 class Canvas(QWidget):
     """Copied over from pymmcore_widgets ImagePreview

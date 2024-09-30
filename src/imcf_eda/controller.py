@@ -17,6 +17,9 @@ from imcf_eda.interpreter import PositionInterpreter
 
 from imcf_eda.events import EventHub
 
+from pymmcore_plus.mda import handlers
+
+from imcf_eda.gui._preview import Preview
 
 class Controller(QObject):
     scan_finished = Signal()
@@ -30,8 +33,16 @@ class Controller(QObject):
         self.view = view
         self.mmc = mmc
         self.event_hub = event_hub
+        self.is_acquiring = False
+
+        self.fov_select = QOverview()
+        self.fov_select.new_fovs.connect(self.rcv_fovs)
+
+        self.preview = Preview(mmcore=self.mmc)
 
         self.view.overview.button.pressed.connect(self.run_overview)
+        self.view.overview.prev_btn.pressed.connect(self.prev_overview)
+        self.view.scan.focus_btn.pressed.connect(self.focus_scan)
         self.view.scan.scan_acq_btn.pressed.connect(self.dual_scan)
         self.analysis_finished.connect(self.update_acq_mda)
 
@@ -39,18 +50,22 @@ class Controller(QObject):
         overview_mda = self.model.overview.mda
         self.mmc.setConfig(self.model.config.objective_group,
                            self.model.overview.parameters.objective)
-        # writer = handlers
-        self.mmc.run_mda(overview_mda, block=True)
-        self.fov_select = QOverview()
-        self.fov_select.new_fovs.connect(self.rcv_fovs)
+        self.path = Path(self.model.save.save_dir) / self.model.save.save_name.split(".")[0]
+        self.writer = handlers.OMEZarrWriter(self.path /
+                                             "overview.ome.zarr",
+                                             overwrite=True)
+        self.mmc.run_mda(overview_mda, block=True, output=self.writer)
+        self.fov_select.load_data(self.path/"overview.ome.zarr")
         self.fov_select.show()
 
     def rcv_fovs(self, fovs: 'List[List[np.ndarray]]'):
         print("FOVs received in EDA GUI")
         scan_mda = self.model.scan.mda
         all_fovs = [item for sublist in fovs for item in sublist]
+        all_fovs = [(item[1], item[0]) for item in all_fovs]
         scan_mda = scan_mda.replace(stage_positions=all_fovs)
         self.view.scan.mda.setValue(scan_mda)
+        self.model.scan.mda = scan_mda
 
     def update_acq_mda(self):
         self.view.tabs.setCurrentIndex(3)
@@ -59,13 +74,11 @@ class Controller(QObject):
     def dual_scan(self):
         self.scan_finished.connect(self.analyse_thr)
         self.analysis_finished.connect(self.acquire_thr)
-
         self.scan_thr()
-
         self.view.tabs.setCurrentIndex(2)
 
     def scan(self):
-        path = Path(self.model.save.save_dir) / self.model.save.save_name
+        path = Path(self.model.save.save_dir) / self.model.save.save_name.split(".")[0]
         self.analyser = MIPAnalyser(self.mmc, self.event_hub,
                                     self.model.analyser, path)
         self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
@@ -99,3 +112,43 @@ class Controller(QObject):
     def acquire_thr(self):
         self.acquire_thread = Thread(target=self.acquire)
         self.acquire_thread.start()
+
+    def focus_scan(self):
+        if self.is_acquiring:
+            self.view.scan.focus_btn.setText("Start Focus")
+        else:
+            self.view.scan.focus_btn.setText("Stop Focus")
+            pos = self.model.scan.mda.stage_positions[0]
+            print("Going to", pos.x, pos.y)
+            self.mmc.setXYPosition(pos.x, pos.y)
+        self.live(self.model.scan.parameters.objective, self.model.scan.parameters.preview_channel)
+    
+    def prev_overview(self):
+        if self.is_acquiring:
+            self.view.overview.prev_btn.setText("Start Preview")
+        else:
+            self.view.overview.prev_btn.setText("Stop Preview")
+        self.live(self.model.overview.parameters.objective, "Brightfield")
+
+    def live(self, objective, channel):
+        if not self.is_acquiring:
+            # Start the acquisition
+            
+            self.preview.mmc_connect()
+            self.preview.show()
+
+            # Set configuration based on model settings
+            self.mmc.setConfig(self.model.config.objective_group, objective)
+            self.mmc.setConfig(self.model.config.channel_group, channel)
+            
+            # Start acquisition
+            self.mmc.startContinuousSequenceAcquisition()
+            self.is_acquiring = True
+            
+        else:
+            # Stop the acquisition
+            self.mmc.stopSequenceAcquisition()
+            self.preview.mmc_disconnect()
+            self.preview.hide()
+            self.is_acquiring = False
+            

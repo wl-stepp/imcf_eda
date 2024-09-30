@@ -7,7 +7,7 @@ print("PACKAGES", packages)
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-version = "0.1"
+version = "0.2"
 
 setup(
     name="imcf_eda",
@@ -24,9 +24,7 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
-    include_package_data=True,
+    packages={'':'src'},
     install_requires=[
         'useq-schema',
         'numpy',
@@ -37,7 +35,7 @@ setup(
         'pyqt5': ['PyQt5'],
         'pyqt6': ['PyQt6'],
         'test': ['pytest', 'pytest-qt'],
-    },
+        },
     author="Willi L. Stepp",
     author_email="willi.stepp@epfl.ch",
     python_requires=">=3.10",

@@ -4,26 +4,32 @@ from imcf_eda.gui.eda import EDAGUI
 from useq import MDASequence
 
 if __name__ == "__main__":
-
+    import sys
     from pymmcore_plus import CMMCorePlus
 
     from imcf_eda.model import EDASettings
     from imcf_eda.convenience import init_microscope
-
     from qtpy.QtWidgets import QApplication
     app = QApplication([])
-    mmc = CMMCorePlus()
-    settings = EDASettings()
-    settings.scan.mda = MDASequence(stage_positions=((0, 0), (1, 1)),
-                                    channels=[{"config": "Cy5"}])
-    init_microscope(mmc, settings.config)
+    mmc = CMMCorePlus().instance()
+    settings = EDASettings() # Config loaded here for now
+    init_microscope(mmc, False)  # Only set values don't load config
 
-    event_hub = EventHub()
-    # GUI
-    view = EDAGUI(mmc, settings, event_hub)
-    view.scan.mda.setValue(settings.scan.mda)
-    # Controller
-    controller = Controller(settings, view, mmc, event_hub)
+    if len(sys.argv) == 1:
+        event_hub = EventHub()
+        # GUI
+        view = EDAGUI(mmc, settings, event_hub)
+        view.scan.mda.setValue(settings.scan.mda)
+        # Controller
+        controller = Controller(settings, view, mmc, event_hub)
+        view.show()
+    elif sys.argv[1] == "no_eda":
+        from imcf_eda.gui.main import MainWindow
+        window = MainWindow(mmc)
+        window.show()
 
-    view.show()
+        from imcf_eda.gui._preview import Preview
+        preview = Preview(mmcore=mmc)
+        preview.show()
+
     app.exec_()  # type: ignore

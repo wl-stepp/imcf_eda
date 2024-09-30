@@ -30,7 +30,7 @@ class MainWindow(QMainWindowRestore):
         self.scan_button.pressed.connect(self.scan_acquisition)
 
         try:
-            self.psf_offset = StageWidget("PFSOffset")
+            self.psf_offset = StageWidget("ZDrive (Nosepiece)")
             self.xy = StageWidget("XYStage")
         except RuntimeError:
             self.psf_offset = StageWidget("Z")

@@ -5,57 +5,52 @@ from vispy.scene.visuals import Rectangle
 from imcf_eda.gui.polygon_canvas import InteractiveCanvas
 from imcf_eda.gui.overview_fov import find_fovs
 
-HELP_TEXT = '''Double click: Add point
-Enter: calculate FOVs
+HELP_TEXT = '''Double click: Add/delete point
+Enter: Calculate FOVs
 A: Add Polygon
 '''
 
 
 class Overview(InteractiveCanvas):
     def __init__(self, data: np.ndarray | None = None, scale: float = 1., pos: list | None = None,
-                 fov_size: float = 100.):
+                 fov_size: float = 249.59):
         super().__init__()
         self.fovs = []
         self.images = []
         self.rects = []
         self.fov_size = fov_size
         self.view.camera.aspect = 1
-
-        if data is None or pos is None:
-            for pos, cmap in [[[0, 0], 'grays'], [[0, 2048], 'grays'], [[2048, 2048], 'grays']]:
-                # for pos, cmap in [[[0,0], 'grays'], [[0,2048], 'Reds'], [[2048,2048], 'viridis']]:
-                print(pos)
-                print(cmap)
-                # image = np.random.randint(100, 2000, (2048, 2048))
-                image = np.ones((2048, 2048)).astype(np.uint8) * 150
-                image[0, 0] = 1
-                self.images.append(scene.visuals.Image(image, parent=self.view.scene,
-                                                       cmap=cmap, clim=[0, 256]))
-                trans = transforms.linear.MatrixTransform()
-                trans.translate([*pos, 10])
-                self.images[-1].transform = trans
-
-            self.view.camera.rect = [0, 0, 4096, 4096]
-        else:
-            for this_pos, data in zip(pos, data):
-                self.images.append(scene.visuals.Image(data, parent=self.view.scene,
-                                                       cmap='grays', clim=[0, 256]))
-                trans = transforms.linear.MatrixTransform()
-                trans.scale((scale, scale))
-                trans.translate([this_pos[0] - data.shape[0]*scale/2,
-                                 this_pos[1] - data.shape[1]*scale/2,
-                                 10])
-                self.images[-1].transform = trans
-
-            min_x = min([x[0] - data.shape[0]*scale/2 for x in pos])
-            max_x = max([x[0] + data.shape[0]*scale/2 for x in pos])
-            min_y = min([x[1] - data.shape[1]*scale/2 for x in pos])
-            max_y = max([x[1] + data.shape[1]*scale/2 for x in pos])
-            self.view.camera.rect = [min_x, min_y, max_x-min_x, max_y-min_y]
-
+        # self.view.camera.
         self.text = scene.visuals.Text(HELP_TEXT, color='white', font_size=12, parent=self.canvas.scene,
                                        anchor_x="left", anchor_y="bottom")
         self.text.transform = transforms.STTransform(translate=(5, 5))
+
+    def update_data(self, pos, data, scale):
+        print("UPDATING DATA")
+        for image in self.images:
+            image.parent = None
+        self.images = []
+        for this_pos, data in zip(pos, data):
+            clims = (data.min(), data.max())
+            self.images.append(scene.visuals.Image(data, parent=self.view.scene,
+                                                    cmap='grays', clim=clims))
+            trans = transforms.linear.MatrixTransform()
+            trans.rotate(-90, (0, 0, 1))
+            trans.scale((-scale[0], scale[1]))
+            trans.translate([this_pos[1] + data.shape[1]*scale[0]/2,
+                             this_pos[0] + data.shape[0]*scale[1]/2,
+                                10])
+            self.images[-1].transform = trans
+
+        min_x = min([x[1] - data.shape[0]*abs(scale[0]/2) for x in pos])
+        max_x = max([x[1] + data.shape[0]*abs(scale[0]/2) for x in pos])
+        min_y = min([x[0] - data.shape[1]*abs(scale[1]/2) for x in pos])
+        max_y = max([x[0] + data.shape[1]*abs(scale[1]/2) for x in pos])
+        self.view.camera.rect = [min_x, min_y, max_x-min_x, max_y-min_y]
+
+    def update_fov_size(self, fov_size):
+        #TODO implement this to change when the objective in the scan settings change
+        self.fov_size = fov_size
 
     def reset_images(self):
         for image in self.images:
@@ -101,24 +96,7 @@ if __name__ == "__main__":
     import pathlib
     import json
 
-    # url = ("/mnt/c/Users/stepp/Downloads/Basel_data/"
-    #        "data/eda_data_024/scan.ome.zarr/")
-    # store = parse_url(url, mode="r")
-    # reader = Reader(store)
-    # # nodes may include images, labels etc
-    # nodes = list(reader())
-    # # first node will be the image pixel data
-    # image_node = nodes[0]
-
-    # with open(pathlib.Path(url) / "p0/.zattrs", "r") as file:
-    #     metadata = json.load(file)
-    # scale = metadata["frame_meta"][0]["PixelSizeUm"]
-    # pos = []
-    # for g_pos in metadata["frame_meta"]:
-    #     pos.append([g_pos["Event"]["x_pos"], g_pos["Event"]["y_pos"]])
-    # data = image_node.data[0][:, 0, 100, :, :]
-    # for i in range(data.shape[0]):
-    #     data[i] = np.rot90(data[i], 2)
+    
     canvas = Overview()
     run()
 

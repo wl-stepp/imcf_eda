@@ -37,8 +37,10 @@ class OverviewGUI(QWidget):
         self.settings = settings or OverviewMDASettings()
         self.mda.setValue(self.settings.mda)
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
+        self.prev_btn = QPushButton("Preview")
         self.button = QPushButton("⏵ Run Overview")
         self.button.setFont(QFont('Sans Serif', 16))
+        self.lay.addWidget(self.prev_btn)
         self.lay.addWidget(self.button)
 
     def update_mda(self):
@@ -64,12 +66,15 @@ class ScanGUI(QWidget):
         self.settings = settings or ScanMDASettings()
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
 
+        self.focus_btn = QPushButton("Focus")
+
         self.scan_btn = QPushButton("⏵ Scan Only")
         self.scan_btn.setFont(QFont('Times', 16))
         self.scan_acq_btn = QPushButton("⏵ DualScan")
         self.scan_acq_btn.setFont(QFont('Sans Serif', 16))
         self.btn_lay = QHBoxLayout()
-        self.btn_lay.addWidget(self.scan_btn)
+        # self.btn_lay.addWidget(self.scan_btn)
+        self.btn_lay.addWidget(self.focus_btn)
         self.btn_lay.addWidget(self.scan_acq_btn)
         self.lay.addLayout(self.btn_lay)
 
@@ -151,11 +156,17 @@ class EDAGUI(QWidgetRestore):
         pprint(self.settings)
 
 
+#TODO: the loading here might have to go somewhere else
+import zarr
+import numpy as np
+import pathlib
+import json
+
 class QOverview(QWidgetRestore):
     new_fovs = Signal(list)
 
-    def __init__(self, data=None):
-        super().__init__(data)
+    def __init__(self, data_dir=None):
+        super().__init__()
         self.overview = Overview()
         self.lay = QVBoxLayout()
         self.setLayout(self.lay)
@@ -168,6 +179,24 @@ class QOverview(QWidgetRestore):
             self.super_update_fovs()
             self.new_fovs.emit(self.overview.fovs)
 
+    def load_data(self, data_dir):
+        with open(pathlib.Path(data_dir) / "p0/.zattrs","r") as file:
+            metadata = json.load(file)
+        zarr_data = zarr.open(data_dir/"p0", mode='r')
+        # Convert to numpy array (if needed, this will depend on how the Zarr array is structured)
+        data = np.array(zarr_data)
+        print(data.shape)
+        scale = [metadata["frame_meta"][0]["pixel_size_um"], metadata["frame_meta"][0]["pixel_size_um"]]
+        print(scale)
+        if len(data.shape) == 4:
+            shape = data.shape
+        else:
+            shape = [1]
+        pos = [(metadata["frame_meta"][i]['position']['x'], metadata["frame_meta"][i]['position']['y']) for i in range(shape[0])]
+        print(pos)
+        if len(data.shape) == 4:
+            data = data[:, 0, :, :]
+        self.overview.update_data(pos, data, scale)
 
 if __name__ == "__main__":
     from qtpy.QtWidgets import QApplication

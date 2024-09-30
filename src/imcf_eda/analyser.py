@@ -78,16 +78,18 @@ class MIPAnalyser():
             mips = zarr.open(str(self.path/("p" + str(pos))), mode='r')
             index = tuple(event.index[k]
                           for k in self.writer.position_sizes[pos])
-            mip = mips[*index, :, :].copy()
+            mip = mips[(*index, slice(None), slice(None))].copy()
             worker = MIPWorker(mip, event, metadata, self.settings,
                                self.model, self.event_hub, self.net_writer)
             worker.run()
         self.net_writer.sequenceFinished(self.sequence)
+        with open(self.save_dir / "network.ome.zarr/eda_seq.json", "w") as file:
+            file.write(self.sequence.model_dump_json())
         self.event_hub.analysis_finished.emit()
 
 
 class MIPWorker():
-    def __init__(self, mip: np.ndarray, event: MDAEvent, metadata: FrameMetaV1,
+    def __init__(self, mip: np.ndarray, event: MDAEvent, metadata,
                  settings: AnalyserSettings,
                  model: keras.Model,
                  event_hub: SignalGroup, writer: handlers.OMEZarrWriter):
