@@ -24,10 +24,12 @@ class ConfigSettings:
 
     def __init__(self):
         mmc = CMMCorePlus().instance()
-        if self.mm_config:
+        try:
             mmc.loadSystemConfiguration(self.mm_config)
-        else:
+        except FileNotFoundError:
             mmc.loadSystemConfiguration()
+            self.objective_group = 'Objective'
+            self.channel_group = 'Channel'
         self.objectives = mmc.getAvailableConfigs(self.objective_group)
         self.channels = mmc.getAvailableConfigs(self.channel_group)
         self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
@@ -38,12 +40,12 @@ objectives = settings.objectives
 pixel_sizes = settings.pixel_sizes
 channels = settings.channels
 
+
 @guiclass
 class OverviewSettings:
     objective:  Literal[
         objectives  # type:ignore
     ] = settings.objectives[1]
-
 
 
 @dataclass
@@ -70,7 +72,7 @@ class ScanMDASettings:
 class AnalyserSettings:
     threshold: float = 0.1
     closing_kernel: int = 3
-    channel: Literal[channels] = settings.channels[4]
+    channel: Literal[channels] = settings.channels[0]
     model_path: str = ("F:/imcf_eda/models/"
                        "unet2d_vish_v4/keras_weights.hdf5")
 
