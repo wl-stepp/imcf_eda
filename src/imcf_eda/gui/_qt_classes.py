@@ -108,3 +108,34 @@ def set_eda(widget: QWidget):
     dark_palette.setColor(
         QPalette.Disabled, QPalette.Light, QColor(31, 53, 69))
     widget.setPalette(dark_palette)
+
+
+from qtpy.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout
+
+class PromptWindow(QWidget):
+    def __init__(self, text=None):
+        self.text = text
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        # Set up the layout
+        layout = QVBoxLayout()
+
+        # Add a label with a prompt message
+        if self.text is None:
+            self.text = "Add oil and press OK to continue"
+        self.label = QLabel(self.text, self)
+        layout.addWidget(self.label)
+
+        # Add the OK button
+        self.okButton = QPushButton("OK", self)
+
+        layout.addWidget(self.okButton)
+
+        # Set layout to the window
+        self.setLayout(layout)
+
+        # Window settings
+        self.setWindowTitle("Prompt Window")
+        self.setGeometry(100, 100, 300, 100)

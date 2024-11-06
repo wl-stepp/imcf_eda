@@ -23,7 +23,7 @@ class Preview(QWidgetRestore):
     new_mask = QtCore.Signal(np.ndarray)
 
     def __init__(self, parent: QWidget | None = None, mmcore: CMMCorePlus | None = None,
-                 key_listener: QObject | None = None):
+                 key_listener: QObject | None = None, acq: bool = False):
         super().__init__(parent=parent)
         self._mmc = mmcore
         self.current_frame = None
@@ -32,12 +32,16 @@ class Preview(QWidgetRestore):
         self.rot = settings.get("rot", 90)
         self.mirror_x = settings.get("mirror_x", False)
         self.mirror_y = settings.get("mirror_y", True)
+        self.acq = acq
         # self.rot = 90
         # self.mirror_x = False
         # self.mirror_y = True
-
-        self.preview = Canvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
-                              mirror_y=self.mirror_y, parent=self)
+        if acq:
+            self.preview = AcqCanvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
+                                mirror_y=self.mirror_y, parent=self)
+        else:
+            self.preview = Canvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
+                                mirror_y=self.mirror_y, parent=self)
         self.mmc_connect()
 
         self.setWindowTitle("Preview")
@@ -109,12 +113,23 @@ class Preview(QWidgetRestore):
         return settings_dict
 
     def mmc_connect(self):
-        self._mmc.events.imageSnapped.connect(self.preview._on_image_snapped)
-        self._mmc.events.imageSnapped.connect(self.new_frame)
+        if not self.acq:
+            self.preview.connect()
+            self._mmc.events.imageSnapped.connect(self.preview._on_image_snapped)
+            self._mmc.events.imageSnapped.connect(self.new_frame)
+        else:
+            self._mmc.mda.events.frameReady.connect(self.preview._on_image_snapped)
 
     def mmc_disconnect(self):
-        self._mmc.events.imageSnapped.disconnect(self.preview._on_image_snapped)
-        self._mmc.events.imageSnapped.disconnect(self.new_frame)
+        if not self.acq:
+            print("Disconnect viewer")
+            self.preview._disconnect()
+            self._mmc.events.imageSnapped.disconnect(self.preview._on_image_snapped)
+            self._mmc.events.imageSnapped.disconnect(self.new_frame)
+        else:
+            self._mmc.mda.events.frameReady.disconnect(self.preview._on_image_snapped)
+
+
 
 class Canvas(QWidget):
     """Copied over from pymmcore_widgets ImagePreview
@@ -180,10 +195,6 @@ class Canvas(QWidget):
         self.streaming_timer.setInterval(int(self._mmc.getExposure()) or _DEFAULT_WAIT)
         self.streaming_timer.timeout.connect(self._on_image_snapped)
 
-        self._mmc.events.continuousSequenceAcquisitionStarted.connect(self._on_streaming_start)
-        self._mmc.events.sequenceAcquisitionStopped.connect(self._on_streaming_stop)
-        self._mmc.events.exposureChanged.connect(self._on_exposure_changed)
-
         #Rect interaction
         self.selected_object = None
         self.selected_point = None
@@ -191,6 +202,11 @@ class Canvas(QWidget):
         self.objects = []
 
         self.destroyed.connect(self._disconnect)
+
+    def connect(self):
+        self._mmc.events.continuousSequenceAcquisitionStarted.connect(self._on_streaming_start)
+        self._mmc.events.sequenceAcquisitionStopped.connect(self._on_streaming_stop)
+        self._mmc.events.exposureChanged.connect(self._on_exposure_changed)
 
     def _disconnect(self) -> None:
         ev = self._mmc.events
@@ -202,9 +218,11 @@ class Canvas(QWidget):
         self.streaming_timer.setInterval(max(20, int(value)))
 
     def _on_streaming_start(self) -> None:
+        print("STREAMING STARTED")
         self.streaming_timer.start()
 
     def _on_streaming_stop(self) -> None:
+        print("STREAMING STOPPED")
         self.streaming_timer.stop()
 
     def update_clims(self, value: tuple[int, int]) -> None:
@@ -291,7 +309,6 @@ class Canvas(QWidget):
                 self.view.camera.viewbox_mouse_event)  
             self._canvas.events.mouse_press.disconnect(self.on_mouse_press) 
             self._canvas.events.mouse_move.disconnect(self.on_mouse_move)          
-
 
     def set_creation_mode(self, object_kind):
         self.creation_mode = object_kind
@@ -384,6 +401,23 @@ class Canvas(QWidget):
 
 
 
+class AcqCanvas(Canvas):
+    def __init__(
+        self,
+        *,
+        parent: QWidget | None = None,
+        mmcore: CMMCorePlus | None = None,
+        rot: int = 0,
+        mirror_x: bool = False,
+        mirror_y: bool = False,
+    ):
+        super().__init__(parent=parent, mmcore=mmcore, rot=rot, mirror_x=mirror_x, mirror_y=mirror_y)
+        self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(self._on_streaming_start)
+        self._mmc.events.sequenceAcquisitionStopped.disconnect(self._on_streaming_stop)
+        self._mmc.events.exposureChanged.disconnect(self._on_exposure_changed)
+        self._mmc.mda.events.frameReady.connect(self._on_image_snapped)
+
+
 class EditVisual(scene.visuals.Compound):
     def __init__(self, editable=True, selectable=True, on_select_callback=None,
                  callback_argument=None, *args, **kwargs):
@@ -470,7 +504,6 @@ class EditRectVisual(EditVisual):
         self.rect.width = abs(self.control_points._width)
         self.rect.height =abs(self.control_points._height)
         self.rect.center = self.control_points.get_center()
-
 
 
 class ControlPoints(scene.visuals.Compound):

@@ -32,18 +32,12 @@ class MIPAnalyser():
         self.metadatas = []
         self.sizes = {}
         self.stack = np.ndarray((1, 1, 1))
-        self.model = keras.models.load_model(settings.model_path)
+        self.model = keras.models.load_model(settings.model_path, compile=False)
         self.model.predict(np.random.randint(100, 300, ((1, 256, 256, 1))))
         self.sequence = MDASequence()
-        self.analysis_threads = []
 
     def frameReady(self, image: np.ndarray, event: MDAEvent,
                    metadata: FrameMetaV1):
-        # Check if the frame is for us
-        if any([self.analyse_channel is None,
-                event.channel != self.analyse_channel]):
-            return
-
         self.stack[event.index.get('c', 0), event.index.get('z', 0)] = image
 
         # Check if we have a full stack
@@ -51,10 +45,13 @@ class MIPAnalyser():
             print("Full stack received!", self.stack.shape, "Computing MIP...")
             self.mip = np.max(self.stack[event.index.get('c', 0)], axis=0)
             self.writer.frameReady(self.mip, event, metadata)
-            self.events.append(event)
-            self.metadatas.append(metadata)
+            # Check if the frame is for analysis
+            if event.channel == self.analyse_channel:
+                self.events.append(event)
+                self.metadatas.append(metadata)
 
     def sequenceStarted(self, sequence: MDASequence, metadata):
+        
         self.writer.sequenceStarted(sequence, metadata)
         self.sequence = sequence
         self.metadata = metadata
@@ -105,23 +102,39 @@ class MIPWorker():
         """Get the first pixel value of the passed images and return."""
         network_input = self.prepare_image(self.mip)
         network_output = self.model.predict(network_input)
-        network_output = network_output.reshape(
-            (9, 9, 256, 256)).swapaxes(2, 1).reshape((2304, 2304))
+        if self.model.layers[0].input_shape[0] is None:
+            image = image[0, :, :, 0]
+        else:
+            network_output = network_output.reshape(
+                (9, 9, 256, 256)).swapaxes(2, 1).reshape((2304, 2304))
+        self.writer.frameReady(network_output, self.event, self.metadata)
         network_output = self.post_process_net_out(network_output)
         positions = self.get_positions(network_output)
         self.event_hub.new_positions.emit(positions)
-        self.writer.frameReady(network_output, self.event, self.metadata)
 
     def prepare_image(self, image: np.ndarray):
         """Here if we need to do some preprocessing."""
         image = image.astype(np.float32, copy=False)
         image = (image - np.amin(image)) / \
             (np.amax(image) - np.amin(image) + 1e-10)
-        image = image.reshape((9, 256, 9, 256)).swapaxes(
-            1, 2).reshape((81, 256, 256))
+        if self.model.layers[0].input_shape[0] is None:
+            image = np.expand_dims(image, [0, -1])
+        else:
+            image = image.reshape((9, 256, 9, 256)).swapaxes(
+                1, 2).reshape((81, 256, 256))
         return image
 
     def post_process_net_out(self, network_output: np.ndarray):
+        tile_size = 256
+        border_size = 9
+        # Remove the 9x9 pixel area at each intersection
+        for i in range(1, 9): 
+            for j in range(1, 9):
+
+                x_start = i * tile_size - border_size // 2
+                y_start = j * tile_size - border_size // 2              
+                # Set the 9x9 region to zero (or any background value, e.g., the mean of neighbors)
+                network_output[x_start:x_start + border_size, y_start:y_start + border_size] = 0
         network_output[network_output <
                        self.settings.threshold] = 0
         network_output[network_output >=

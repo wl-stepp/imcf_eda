@@ -1,6 +1,6 @@
 from pymmcore_plus import CMMCorePlus
 from typing import Annotated, Literal
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from magicgui.experimental import guiclass
 import useq
 
@@ -14,9 +14,14 @@ class DisplaySettings:
 
 class ConfigSettings:
     # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
-    mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
-    objective_group: str = "4-Objective"
-    channel_group: str = "3-Channel"
+    # mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
+    # objective_group: str = "4-Objective"
+    # channel_group: str = "3-Channel"
+    # corse_z_stage: str = "ZDrive"
+    mm_config: str | None = None 
+    objective_group: str = "Objective"
+    channel_group: str = "Channel"
+    corse_z_stage: str = "Z"
     objectives: tuple[str, ...] = ()
     channels: tuple[str, ...] = ()
     pixel_sizes: tuple[str, ...] = ()
@@ -24,12 +29,13 @@ class ConfigSettings:
 
     def __init__(self):
         mmc = CMMCorePlus().instance()
-        try:
-            mmc.loadSystemConfiguration(self.mm_config)
-        except FileNotFoundError:
+        if self.mm_config:
+            try:
+                mmc.loadSystemConfiguration(self.mm_config)
+            except FileNotFoundError:
+                mmc.loadSystemConfiguration()
+        else:
             mmc.loadSystemConfiguration()
-            self.objective_group = 'Objective'
-            self.channel_group = 'Channel'
         self.objectives = mmc.getAvailableConfigs(self.objective_group)
         self.channels = mmc.getAvailableConfigs(self.channel_group)
         self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
@@ -40,12 +46,12 @@ objectives = settings.objectives
 pixel_sizes = settings.pixel_sizes
 channels = settings.channels
 
-
 @guiclass
 class OverviewSettings:
     objective:  Literal[
         objectives  # type:ignore
-    ] = settings.objectives[1]
+    ] = settings.objectives[0]
+
 
 
 @dataclass
@@ -65,15 +71,16 @@ class ScanSettings:
 @dataclass
 class ScanMDASettings:
     parameters: ScanSettings = field(default_factory=ScanSettings)
-    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
+    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.3}, channels=["4-Cy5", "3-Cy3"],)
 
 
 @guiclass
 class AnalyserSettings:
-    threshold: float = 0.1
+    threshold: float = 0.5
     closing_kernel: int = 3
-    channel: Literal[channels] = settings.channels[0]
+    channel: Literal[channels] = settings.channels[3]
     model_path: str = ("F:/imcf_eda/models/"
+                       #"unet2d_vish_v8/weights_best.hdf5"
                        "unet2d_vish_v4/keras_weights.hdf5")
 
     def __post_init__(self):
@@ -83,9 +90,9 @@ class AnalyserSettings:
 @guiclass
 class AcquisitionSettings:
     min_border_distance: float = 1.
-    z_offset: float = 2.72
-    x_offset: Annotated[float, {'widget_type': "LineEdit"}] = -23.
-    y_offset: Annotated[float, {'widget_type': "LineEdit"}] = 2.
+    z_offset: float = 2.42
+    x_offset: Annotated[float, {'widget_type': "LineEdit"}] = -7
+    y_offset: Annotated[float, {'widget_type': "LineEdit"}] = 16
     # ('100x', '10x', '25x', '40x', '4x', '60x')
     pixel_size_config: Literal[
         pixel_sizes  # type:ignore
@@ -101,13 +108,13 @@ class AcquisitionSettings:
 class AcquisitionMDASettings:
     parameters: AcquisitionSettings = field(
         default_factory=AcquisitionSettings)
-    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
+    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.5}, channels=["4-Cy5", "3-Cy3"])
 
 
 @dataclass
 class SaveInfo:
     save_dir: str = "F:/data"
-    save_name: str = "2409_015"
+    save_name: str = "2410_005"
     format: str = "ome-zarr"
     should_save: bool = True
 
@@ -123,6 +130,9 @@ class EDASettings:
         default_factory=AcquisitionMDASettings)
 
     save: SaveInfo = field(default_factory=SaveInfo)
+
+    def as_dict(self):
+        return asdict(self)
 
 
 if __name__ == "__main__":

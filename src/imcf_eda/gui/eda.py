@@ -6,7 +6,7 @@ from useq import MDASequence
 
 from imcf_eda.gui._qt_classes import QWidgetRestore, set_dark
 from imcf_eda.gui.overview import Overview
-from pymmcore_widgets import MDAWidget
+from pymmcore_widgets import MDAWidget, LiveButton
 from pymmcore_widgets.mda._save_widget import SaveGroupBox
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.model import (EDASettings, OverviewMDASettings, ScanMDASettings,
@@ -37,10 +37,10 @@ class OverviewGUI(QWidget):
         self.settings = settings or OverviewMDASettings()
         self.mda.setValue(self.settings.mda)
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
-        self.prev_btn = QPushButton("Preview")
-        self.button = QPushButton("⏵ Run Overview")
+        # self.prev_btn = QPushButton("Preview")
+        self.button = QPushButton("Run Overview")
         self.button.setFont(QFont('Sans Serif', 16))
-        self.lay.addWidget(self.prev_btn)
+        # self.lay.addWidget(self.prev_btn)
         self.lay.addWidget(self.button)
 
     def update_mda(self):
@@ -66,15 +66,19 @@ class ScanGUI(QWidget):
         self.settings = settings or ScanMDASettings()
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
 
-        self.focus_btn = QPushButton("Focus")
+        self.oil_btn = QPushButton("Add Oil")
+        self.live_button = LiveButton()
+        self.live_button.setText("Focus")
 
-        self.scan_btn = QPushButton("⏵ Scan Only")
+        self.scan_btn = QPushButton("Scan Only")
         self.scan_btn.setFont(QFont('Times', 16))
-        self.scan_acq_btn = QPushButton("⏵ DualScan")
+        self.scan_acq_btn = QPushButton("DualScan")
         self.scan_acq_btn.setFont(QFont('Sans Serif', 16))
         self.btn_lay = QHBoxLayout()
         # self.btn_lay.addWidget(self.scan_btn)
-        self.btn_lay.addWidget(self.focus_btn)
+        self.btn_lay.addWidget(self.oil_btn)
+        self.btn_lay.addWidget(self.live_button)   
+        # self.btn_lay.addWidget(self.focus_btn)
         self.btn_lay.addWidget(self.scan_acq_btn)
         self.lay.addLayout(self.btn_lay)
 
@@ -108,7 +112,7 @@ class AcquisitionGUI(QWidget):
 
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
 
-        self.acq_btn = QPushButton("⏵ Acquire")
+        self.acq_btn = QPushButton("Acquire")
         self.acq_btn.setFont(QFont('Sans Serif', 16))
         self.lay.addWidget(self.acq_btn)
         self.event_hub = event_hub
@@ -125,6 +129,8 @@ class EDAGUI(QWidgetRestore):
 
         self.mmc = mmc
         self.settings = settings
+
+        self.setWindowTitle("EDA - Smart Imaging")
 
         self.tabs = QTabWidget()
         self.save_info = SaveGroupBox(parent=self)
@@ -154,6 +160,8 @@ class EDAGUI(QWidgetRestore):
     def print_settings(self):
         from pprint import pprint
         pprint(self.settings)
+
+
 
 
 #TODO: the loading here might have to go somewhere else
@@ -196,6 +204,8 @@ class QOverview(QWidgetRestore):
         print(pos)
         if len(data.shape) == 4:
             data = data[:, 0, :, :]
+        elif len(data.shape) == 2:
+            data = np.expand_dims(data, 0)
         self.overview.update_data(pos, data, scale)
 
 if __name__ == "__main__":

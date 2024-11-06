@@ -29,6 +29,7 @@ setup(
         'useq-schema',
         'numpy',
         'pymmcore-plus',
+        'pyyaml'
     ],
     extras_require={
         'ilp': ['pulp'],

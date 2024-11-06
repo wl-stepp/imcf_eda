@@ -9,13 +9,14 @@ import time
 
 class SpatialActuator():
     def __init__(self, mmc: CMMCorePlus, event_hub: EventHub,
-                 settings: EDASettings, analyser, interpreter):
+                 settings: EDASettings, analyser, interpreter, path):
         self.mmc = mmc
         self.event_hub = event_hub
         self.sequence: MDASequence = settings.scan.mda
         self.settings = settings
         self.analyser = analyser
         self.interpreter = interpreter
+        self.save_dir = path
 
         self.orig_pos = self.mmc.getXYPosition()
         self.orig_pos_z = self.mmc.getPosition()
@@ -30,39 +31,40 @@ class SpatialActuator():
         self.reset_pos()
 
     def scan(self):
-        self.save_dir = Path(self.settings.save.save_dir) / \
-            self.settings.save.save_name.split(".")[0]
+
         print("SAVE NAME", self.save_dir)
         self.orig_pos = self.mmc.getXYPosition()
         self.orig_pos_z = self.mmc.getPosition()
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.scan.parameters.objective)
-        self.sequence = self.settings.scan.mda
+        time.sleep(0.5)
+        with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
+            file.write(self.settings.scan.mda.model_dump_json())
         with mda_listeners_connected(self.analyser, self.interpreter,
                                      mda_events=self.mmc.mda.events):
-            self.mmc.run_mda(self.sequence, block=True)
-        with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
-            file.write(self.sequence.model_dump_json())
+            print("Running Scan")
+            self.mmc.mda.run(self.settings.scan.mda)
         print("Going back to z", self.orig_pos_z)
         self.mmc.setPosition(self.orig_pos_z)
         #  while not self.analysis_done:
         #     pass
 
     def acquire(self):
-        self.save_dir = Path(self.settings.save.save_dir) / \
-            self.settings.save.save_name.split(".")[0]
         self.acq_writer = handlers.OMEZarrWriter(self.save_dir /
                                              "acquisition.ome.zarr",
                                              overwrite=True)
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.acquisition.parameters.objective)
+        with open(self.save_dir / "acquisition.ome.zarr/eda_seq.json",
+                  "w") as file:
+            file.write(self.settings.acquisition.mda.model_dump_json())
         time.sleep(1)
         with mda_listeners_connected(self.acq_writer,
                                      mda_events=self.mmc.mda.events):
             self.mmc.mda.run(self.settings.acquisition.mda)
         with open(self.save_dir / "acquisition.ome.zarr/eda_seq.json",
                   "w") as file:
-            file.write(self.settings.acquisition.mda .model_dump_json())
+            file.write(self.settings.acquisition.mda.model_dump_json())
         self.analysis_done = False
 
     def reset_pos(self):

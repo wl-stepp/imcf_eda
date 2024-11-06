@@ -4,17 +4,18 @@ from vispy.scene import visuals
 from vispy.visuals import transforms
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.convenience import init_microscope
-
-CLICK_DISTANCE = 50
+import time
+CLICK_DISTANCE = 3
 
 
 class CalibrationCanvas:
     def __init__(self, mmc: CMMCorePlus):
         self.mmc = mmc
         # Create a canvas
-        self.canvas = scene.SceneCanvas(self, keys='interactive', show=True)
+        self.canvas = scene.SceneCanvas(self, keys='interactive', show=True, size=(512, 512))
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'panzoom'
+        self.view.camera.aspect = 1
 
         # Add a scatter plot
         self.scatter = visuals.Markers(
@@ -43,11 +44,11 @@ class CalibrationCanvas:
         # Update scatter plot
         if self.label_state == 1:
             scatter_points = [x for xs in self.points for x in xs]
-            self.scatter.set_data(np.array(scatter_points), face_color='r')
+            self.scatter.set_data(np.array(scatter_points), face_color='c')
             labels = self.labels
         else:
             scatter_points = [x for xs in self.points_2 for x in xs]
-            self.scatter_2.set_data(np.array(scatter_points), face_color='c')
+            self.scatter_2.set_data(np.array(scatter_points), face_color='m')
             labels = self.labels_2
         for label in labels:
             label.parent = None
@@ -98,15 +99,18 @@ class CalibrationCanvas:
     def on_key_press(self, event):
         if event.key == 'Enter':
             self.mmc.snapImage()
+            time.sleep(1)
             img = self.mmc.getImage()
+            scale = self.mmc.getPixelSizeUm()
+            print("SCALE", scale)
             if self.objective == 1:
                 # img = image
-                self.update_data(img, (1, 1), 'grays')
+                self.update_data(img, (scale, scale), 'grays')
                 self.z0 = self.mmc.getPosition()
                 self.objective = 2
             elif self.objective == 2 and self.label_state == 1:
                 # img = cropped_image
-                self.update_data(img, (0.6, 0.6), 'grays', (5, 14))
+                self.update_data(img, (scale, scale), 'viridis')
                 self.images[-1].set_gl_state("additive", depth_test=False)
                 self.z1 = self.mmc.getPosition()
                 self.label_state = 2
