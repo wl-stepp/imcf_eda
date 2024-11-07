@@ -14,10 +14,12 @@ class DisplaySettings:
 
 class ConfigSettings:
     # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
+    #IMCF
     # mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
     # objective_group: str = "4-Objective"
     # channel_group: str = "3-Channel"
     # corse_z_stage: str = "ZDrive"
+    #DEMO
     mm_config: str | None = None 
     objective_group: str = "Objective"
     channel_group: str = "Channel"

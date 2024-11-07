@@ -175,6 +175,7 @@ class Controller(QObject):
 
     def reset_position(self):
         pos = self.model.scan.mda.stage_positions[0]
+        #check here if there are actually positions in the mda, otherwise use the original position
         self.mmc.setXYPosition(pos.x, pos.y)
         time.sleep(1)
         self.mmc.setPosition(self.model.config.corse_z_stage, self.oil_orig_z)
