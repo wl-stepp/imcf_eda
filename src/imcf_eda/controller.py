@@ -110,7 +110,8 @@ class Controller(QObject):
         self.scan_finished.emit()
 
     def analyse(self):
-        self.analyser.analyse()
+        # TODO: If we reload this, we should get the positions from the save
+        self.analyser.analsye()
         self.acq_seq = self.interpreter.interpret()
         self.model.acquisition.mda = self.acq_seq
         self.analysis_finished.emit()
@@ -133,12 +134,18 @@ class Controller(QObject):
     def analyse_thr(self):
         self.analysis_thread = Thread(target=self.analyse)
         self.analysis_thread.start()
-        self.scan_finished.disconnect(self.analyse_thr)
+        try:
+            self.scan_finished.disconnect(self.analyse_thr)
+        except TypeError:
+            pass
 
     def acquire_thr(self):
         self.acquire_thread = Thread(target=self.acquire)
         self.acquire_thread.start()
-        self.analysis_finished.disconnect(self.acquire_thr)
+        try:
+            self.analysis_finished.disconnect(self.acquire_thr)
+        except TypeError:
+            pass
 
     def live(self, objective, channel):
         if not self.is_acquiring:

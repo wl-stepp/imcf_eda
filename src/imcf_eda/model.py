@@ -31,22 +31,26 @@ class ConfigSettings:
 
     def __init__(self):
         mmc = CMMCorePlus().instance()
-        if self.mm_config:
-            try:
-                mmc.loadSystemConfiguration(self.mm_config)
-            except FileNotFoundError:
-                mmc.loadSystemConfiguration()
-        else:
-            mmc.loadSystemConfiguration()
         self.objectives = mmc.getAvailableConfigs(self.objective_group)
         self.channels = mmc.getAvailableConfigs(self.channel_group)
         self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
+
+        self.analyser_channels = []
+        # for the analyser, the dual channels will be split up
+        for channel in self.channels:
+            if 'Dual' in channel:
+                self.analyser_channels.append(channel.split('-')[1])
+                self.analyser_channels.append(channel.split('-')[2])
+            else:
+                self.analyser_channels.append(channel)
+        self.analyser_channels = tuple(self.analyser_channels)
 
 
 settings = ConfigSettings()
 objectives = settings.objectives
 pixel_sizes = settings.pixel_sizes
 channels = settings.channels
+analyser_channels = settings.analyser_channels
 
 
 @guiclass
@@ -74,14 +78,14 @@ class ScanSettings:
 class ScanMDASettings:
     parameters: ScanSettings = field(default_factory=ScanSettings)
     mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.3},
-                                             channels=["4-Cy5", "3-Cy3"],)
+                                             channels=["Dual-GFP-Cy5"])
 
 
 @guiclass
 class AnalyserSettings:
     threshold: float = 0.5
     closing_kernel: int = 3
-    channel: Literal[channels] = settings.channels[3]
+    channel: Literal[analyser_channels] = settings.analyser_channels[0]
     model_path: str = ("F:/imcf_eda/models/"
                        # "unet2d_vish_v8/weights_best.hdf5"
                        "unet2d_vish_v4/keras_weights.hdf5")

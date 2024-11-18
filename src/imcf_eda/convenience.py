@@ -1,4 +1,7 @@
-from imcf_eda.model import ConfigSettings
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from imcf_eda.model import ConfigSettings
 
 
 def init_microscope(mmc, settings: ConfigSettings = None):

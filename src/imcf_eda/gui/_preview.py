@@ -434,11 +434,11 @@ class AcqCanvas(Canvas):
     ):
         super().__init__(parent=parent, mmcore=mmcore,
                          rot=rot, mirror_x=mirror_x, mirror_y=mirror_y)
-        self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(
-            self._on_streaming_start)
-        self._mmc.events.sequenceAcquisitionStopped.disconnect(
-            self._on_streaming_stop)
-        self._mmc.events.exposureChanged.disconnect(self._on_exposure_changed)
+        # self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(
+        #     self._on_streaming_start)
+        # self._mmc.events.sequenceAcquisitionStopped.disconnect(
+        #     self._on_streaming_stop)
+        # self._mmc.events.exposureChanged.disconnect(self._on_exposure_changed)
         self._mmc.mda.events.frameReady.connect(self._on_image_snapped)
 
 
