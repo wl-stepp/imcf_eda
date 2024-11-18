@@ -1,6 +1,7 @@
 useq-schema
 numpy
 pymmcore-plus
+pyyaml
 
 [ilp]
 pulp

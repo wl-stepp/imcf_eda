@@ -23,6 +23,7 @@ from pymmcore_plus.mda import handlers
 from imcf_eda.gui._preview import Preview
 from imcf_eda.gui._qt_classes import PromptWindow
 
+
 class Controller(QObject):
     scan_finished = Signal()
     analysis_finished = Signal()
@@ -45,17 +46,21 @@ class Controller(QObject):
         self.preview = Preview(mmcore=self.mmc, acq=True)
 
         self.view.overview.button.pressed.connect(self.run_overview)
-        # self.view.overview.prev_btn.pressed.connect(self.prev_overview)
-        # self.view.scan.focus_btn.pressed.connect(self.focus_scan)
         self.view.scan.oil_btn.pressed.connect(self.add_oil)
         self.view.scan.scan_acq_btn.pressed.connect(self.dual_scan)
+        self.view.scan.cancel_btn.pressed.connect(self.mmc.mda.cancel)
+        self.view.scan.scan_btn.pressed.connect(self.scan_thr)
+        self.view.analysis.analysis_btn.pressed.connect(self.analyse_thr)
+        self.view.acquisition.acq_btn.pressed.connect(self.acquire_thr)
+        self.view.acquisition.cancel_btn.pressed.connect(self.mmc.mda.cancel)
         self.analysis_finished.connect(self.update_acq_mda)
 
     def run_overview(self):
         overview_mda = self.model.overview.mda
         self.mmc.setConfig(self.model.config.objective_group,
                            self.model.overview.parameters.objective)
-        self.path = Path(self.view.save_info.save_dir.text()) / self.model.save.save_name.split(".")[0]
+        self.path = Path(self.view.save_info.save_dir.text()) / \
+            self.model.save.save_name.split(".")[0]
         self.writer = handlers.OMEZarrWriter(self.path /
                                              "overview.ome.zarr",
                                              overwrite=True)
@@ -77,9 +82,11 @@ class Controller(QObject):
         self.view.acquisition.mda.setValue(self.acq_seq)
 
     def dual_scan(self):
-        self.path = Path(self.view.save_info.save_dir.text())  / self.model.save.save_name.split(".")[0]
+        self.path = Path(self.view.save_info.save_dir.text()) / \
+            self.model.save.save_name.split(".")[0]
         with open(self.path / "settings.yaml", "w") as yaml_file:
-            yaml.dump(self.model.as_dict(), yaml_file, default_flow_style=False)
+            yaml.dump(self.model.as_dict(), yaml_file,
+                      default_flow_style=False)
         self.scan_finished.connect(self.analyse_thr)
         self.analysis_finished.connect(self.acquire_thr)
         self.scan_thr()
@@ -88,7 +95,8 @@ class Controller(QObject):
     def scan(self):
         if self.main_overview:
             self.main_overview.mmc_disconnect()
-        path = Path(self.view.save_info.save_dir.text()) / self.view.save_info.save_name.text().split(".")[0]
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
         print("PATH", path)
         self.analyser = MIPAnalyser(self.mmc, self.event_hub,
                                     self.model.analyser, path)
@@ -132,29 +140,28 @@ class Controller(QObject):
         self.acquire_thread.start()
         self.analysis_finished.disconnect(self.acquire_thr)
 
-
     def live(self, objective, channel):
         if not self.is_acquiring:
             # Start the acquisition
-            
+
             self.preview.mmc_connect()
             self.preview.show()
 
             # Set configuration based on model settings
             self.mmc.setConfig(self.model.config.objective_group, objective)
             self.mmc.setConfig(self.model.config.channel_group, channel)
-            
+
             # Start acquisition
             self.mmc.startContinuousSequenceAcquisition()
             self.is_acquiring = True
-            
+
         else:
             # Stop the acquisition
             self.mmc.stopSequenceAcquisition()
             self.preview.mmc_disconnect()
             self.preview.hide()
             self.is_acquiring = False
-            
+
     def add_oil(self):
         self.prompt = PromptWindow()
         self.prompt.show()
@@ -175,9 +182,7 @@ class Controller(QObject):
 
     def reset_position(self):
         pos = self.model.scan.mda.stage_positions[0]
-        #check here if there are actually positions in the mda, otherwise use the original position
+        # check here if there are actually positions in the mda, otherwise use the original position
         self.mmc.setXYPosition(pos.x, pos.y)
         time.sleep(1)
         self.mmc.setPosition(self.model.config.corse_z_stage, self.oil_orig_z)
-
-

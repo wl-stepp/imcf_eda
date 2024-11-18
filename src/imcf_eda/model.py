@@ -14,13 +14,13 @@ class DisplaySettings:
 
 class ConfigSettings:
     # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
-    #IMCF
+    # IMCF
     # mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
     # objective_group: str = "4-Objective"
     # channel_group: str = "3-Channel"
     # corse_z_stage: str = "ZDrive"
-    #DEMO
-    mm_config: str | None = None 
+    # DEMO
+    mm_config: str | None = None
     objective_group: str = "Objective"
     channel_group: str = "Channel"
     corse_z_stage: str = "Z"
@@ -48,12 +48,12 @@ objectives = settings.objectives
 pixel_sizes = settings.pixel_sizes
 channels = settings.channels
 
+
 @guiclass
 class OverviewSettings:
     objective:  Literal[
         objectives  # type:ignore
     ] = settings.objectives[0]
-
 
 
 @dataclass
@@ -73,7 +73,8 @@ class ScanSettings:
 @dataclass
 class ScanMDASettings:
     parameters: ScanSettings = field(default_factory=ScanSettings)
-    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.3}, channels=["4-Cy5", "3-Cy3"],)
+    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.3},
+                                             channels=["4-Cy5", "3-Cy3"],)
 
 
 @guiclass
@@ -82,7 +83,7 @@ class AnalyserSettings:
     closing_kernel: int = 3
     channel: Literal[channels] = settings.channels[3]
     model_path: str = ("F:/imcf_eda/models/"
-                       #"unet2d_vish_v8/weights_best.hdf5"
+                       # "unet2d_vish_v8/weights_best.hdf5"
                        "unet2d_vish_v4/keras_weights.hdf5")
 
     def __post_init__(self):
@@ -110,7 +111,8 @@ class AcquisitionSettings:
 class AcquisitionMDASettings:
     parameters: AcquisitionSettings = field(
         default_factory=AcquisitionSettings)
-    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.5}, channels=["4-Cy5", "3-Cy3"])
+    mda: useq.MDASequence = useq.MDASequence(
+        z_plan={"range": 4, "step": 0.5}, channels=["4-Cy5", "3-Cy3"])
 
 
 @dataclass

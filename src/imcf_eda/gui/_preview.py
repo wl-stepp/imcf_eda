@@ -4,7 +4,7 @@
 from __future__ import annotations
 from pymmcore_plus import CMMCorePlus
 from qtpy.QtWidgets import (QWidget, QGridLayout, QPushButton, QFileDialog, QMainWindow,
-                            QVBoxLayout, QHBoxLayout, QCheckBox)
+                            QVBoxLayout, QHBoxLayout, QCheckBox, QLineEdit)
 from qtpy import QtCore
 from superqt import fonticon, QRangeSlider
 from fonticon_mdi6 import MDI6
@@ -18,6 +18,7 @@ import json
 from imcf_eda.gui._qt_classes import QWidgetRestore
 
 _DEFAULT_WAIT = 20
+
 
 class Preview(QWidgetRestore):
     new_mask = QtCore.Signal(np.ndarray)
@@ -38,10 +39,10 @@ class Preview(QWidgetRestore):
         # self.mirror_y = True
         if acq:
             self.preview = AcqCanvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
-                                mirror_y=self.mirror_y, parent=self)
+                                     mirror_y=self.mirror_y, parent=self)
         else:
             self.preview = Canvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
-                                mirror_y=self.mirror_y, parent=self)
+                                  mirror_y=self.mirror_y, parent=self)
         self.mmc_connect()
 
         self.setWindowTitle("Preview")
@@ -72,7 +73,8 @@ class Preview(QWidgetRestore):
 
     def save_image(self):
         if self.current_frame is not None:
-            self.save_loc, _ = QFileDialog.getSaveFileName(directory=self.save_loc)
+            self.save_loc, _ = QFileDialog.getSaveFileName(
+                directory=self.save_loc)
             print(self.save_loc)
             try:
                 imsave(self.save_loc[0], self.current_frame)
@@ -104,31 +106,34 @@ class Preview(QWidgetRestore):
             with file.open("r") as file:
                 settings_dict = json.load(file)
         except (FileNotFoundError, TypeError, AttributeError, json.decoder.JSONDecodeError) as e:
-                print(e)
-                print("New Settings for this user")
-                settings_dict = {"path": Path.home() / "Desktop" / "MyTiff.ome.tif",
-                                 "rot": 0,
-                                 "mirror_x": False,
-                                 "mirror_y": False}
+            print(e)
+            print("New Settings for this user")
+            settings_dict = {"path": Path.home() / "Desktop" / "MyTiff.ome.tif",
+                             "rot": 0,
+                             "mirror_x": False,
+                             "mirror_y": False}
         return settings_dict
 
     def mmc_connect(self):
         if not self.acq:
             self.preview.connect()
-            self._mmc.events.imageSnapped.connect(self.preview._on_image_snapped)
+            self._mmc.events.imageSnapped.connect(
+                self.preview._on_image_snapped)
             self._mmc.events.imageSnapped.connect(self.new_frame)
         else:
-            self._mmc.mda.events.frameReady.connect(self.preview._on_image_snapped)
+            self._mmc.mda.events.frameReady.connect(
+                self.preview._on_image_snapped)
 
     def mmc_disconnect(self):
         if not self.acq:
             print("Disconnect viewer")
             self.preview._disconnect()
-            self._mmc.events.imageSnapped.disconnect(self.preview._on_image_snapped)
+            self._mmc.events.imageSnapped.disconnect(
+                self.preview._on_image_snapped)
             self._mmc.events.imageSnapped.disconnect(self.new_frame)
         else:
-            self._mmc.mda.events.frameReady.disconnect(self.preview._on_image_snapped)
-
+            self._mmc.mda.events.frameReady.disconnect(
+                self.preview._on_image_snapped)
 
 
 class Canvas(QWidget):
@@ -182,20 +187,28 @@ class Canvas(QWidget):
         self.clim_rectangle_btn.setCheckable(True)
         self.clim_rectangle_btn.clicked.connect(self.rect_callback)
 
+        self.min_ind = QLineEdit()
+        self.min_ind.setMaximumWidth(100)
+        self.max_ind = QLineEdit()
+        self.max_ind.setMaximumWidth(100)
+
         self.clim_layout = QHBoxLayout()
+        self.clim_layout.addWidget(self.min_ind)
         self.clim_layout.addWidget(self.clim_slider)
+        self.clim_layout.addWidget(self.max_ind)
         self.clim_layout.addWidget(self.auto_clim)
         self.clim_layout.addWidget(self.clim_rectangle_btn)
 
         self.layout().addLayout(self.clim_layout)
 
-        #Streaming when live
+        # Streaming when live
         self.streaming_timer = QtCore.QTimer(parent=self)
         self.streaming_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
-        self.streaming_timer.setInterval(int(self._mmc.getExposure()) or _DEFAULT_WAIT)
+        self.streaming_timer.setInterval(
+            int(self._mmc.getExposure()) or _DEFAULT_WAIT)
         self.streaming_timer.timeout.connect(self._on_image_snapped)
 
-        #Rect interaction
+        # Rect interaction
         self.selected_object = None
         self.selected_point = None
         self.creation_mode = EditRectVisual
@@ -204,13 +217,16 @@ class Canvas(QWidget):
         self.destroyed.connect(self._disconnect)
 
     def connect(self):
-        self._mmc.events.continuousSequenceAcquisitionStarted.connect(self._on_streaming_start)
-        self._mmc.events.sequenceAcquisitionStopped.connect(self._on_streaming_stop)
+        self._mmc.events.continuousSequenceAcquisitionStarted.connect(
+            self._on_streaming_start)
+        self._mmc.events.sequenceAcquisitionStopped.connect(
+            self._on_streaming_stop)
         self._mmc.events.exposureChanged.connect(self._on_exposure_changed)
 
     def _disconnect(self) -> None:
         ev = self._mmc.events
-        ev.continuousSequenceAcquisitionStarted.disconnect(self._on_streaming_start)
+        ev.continuousSequenceAcquisitionStarted.disconnect(
+            self._on_streaming_start)
         ev.sequenceAcquisitionStopped.disconnect(self._on_streaming_stop)
         ev.exposureChanged.disconnect(self._on_exposure_changed)
 
@@ -231,6 +247,8 @@ class Canvas(QWidget):
         self.auto_clim.setChecked(False)
         self._clims[self.last_channel] = (value[0], value[1])
         self.image.clim = (value[0], value[1])
+        self.min_ind.setText(str(value[0]))
+        self.max_ind.setText(str(value[1]))
 
     def update_auto(self, state: int) -> None:
         if state == 2:
@@ -246,10 +264,11 @@ class Canvas(QWidget):
         self.clim_slider.setMaximum(self._clims.get(channel, (0, 2))[1])
         self.clim_slider.blockSignals(block)
         block = self.auto_clim.blockSignals(True)
-        self.auto_clim.setChecked(self._clim_mode.get(channel, "auto") == "auto")
+        self.auto_clim.setChecked(
+            self._clim_mode.get(channel, "auto") == "auto")
         self.auto_clim.blockSignals(block)
 
-    def _on_image_snapped(self, img: np.ndarray | None = None, channel: str|None = None) -> None:
+    def _on_image_snapped(self, img: np.ndarray | None = None, channel: str | None = None) -> None:
         channel = self._mmc.getCurrentConfig("Channel")
         self._adjust_channel(channel)
         if img is None:
@@ -258,11 +277,13 @@ class Canvas(QWidget):
             except (RuntimeError, IndexError):
                 return
         img_max = img.max()
-        #TODO: We might want to do this per channel
+        # TODO: We might want to do this per channel
         slider_max = max(img_max, self.clim_slider.maximum())
         if self._clim_mode.get(channel, "auto") == "auto":
             clim = (img.min(), img_max)
             self._clims[channel] = clim
+            self.min_ind.setText(str(clim[0]))
+            self.max_ind.setText(str(clim[1]))
         else:
             clim = self._clims.get(channel, (0, 1))
         if self.image is None:
@@ -279,7 +300,8 @@ class Canvas(QWidget):
                 trans.translate((0, img.shape[1], 0))
             print("image rotated by", self.rot)
             self.image.transform = trans
-            self.view.camera.set_range(self.image.bounds(0), self.image.bounds(1), margin=0)
+            self.view.camera.set_range(self.image.bounds(
+                0), self.image.bounds(1), margin=0)
         else:
             self.image.set_data(img)
             self.image.clim = clim
@@ -302,13 +324,13 @@ class Canvas(QWidget):
         if state:
             self.view.camera._viewbox.events.mouse_move.disconnect(
                 self.view.camera.viewbox_mouse_event)
-            self._canvas.events.mouse_press.connect(self.on_mouse_press) 
-            self._canvas.events.mouse_move.connect(self.on_mouse_move) 
+            self._canvas.events.mouse_press.connect(self.on_mouse_press)
+            self._canvas.events.mouse_move.connect(self.on_mouse_move)
         else:
             self.view.camera._viewbox.events.mouse_move.connect(
-                self.view.camera.viewbox_mouse_event)  
-            self._canvas.events.mouse_press.disconnect(self.on_mouse_press) 
-            self._canvas.events.mouse_move.disconnect(self.on_mouse_move)          
+                self.view.camera.viewbox_mouse_event)
+            self._canvas.events.mouse_press.disconnect(self.on_mouse_press)
+            self._canvas.events.mouse_move.disconnect(self.on_mouse_move)
 
     def set_creation_mode(self, object_kind):
         self.creation_mode = object_kind
@@ -350,7 +372,7 @@ class Canvas(QWidget):
                 self.selected_object = None
 
     def on_mouse_move(self, event):
-        
+
         if event.button == 1:
             if self.selected_object is not None:
                 self.view.camera._viewbox.events.mouse_move.disconnect(
@@ -372,7 +394,7 @@ class Canvas(QWidget):
                 pos = [int(x) for x in my_object._center]
                 height = abs(int(my_object._height))
                 width = abs(int(my_object._width))
-                
+
                 if self.parent().mirror_x:
                     pos[0] = mask.shape[0] - pos[0]
                 if self.parent().mirror_y:
@@ -400,7 +422,6 @@ class Canvas(QWidget):
             None
 
 
-
 class AcqCanvas(Canvas):
     def __init__(
         self,
@@ -411,9 +432,12 @@ class AcqCanvas(Canvas):
         mirror_x: bool = False,
         mirror_y: bool = False,
     ):
-        super().__init__(parent=parent, mmcore=mmcore, rot=rot, mirror_x=mirror_x, mirror_y=mirror_y)
-        self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(self._on_streaming_start)
-        self._mmc.events.sequenceAcquisitionStopped.disconnect(self._on_streaming_stop)
+        super().__init__(parent=parent, mmcore=mmcore,
+                         rot=rot, mirror_x=mirror_x, mirror_y=mirror_y)
+        self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(
+            self._on_streaming_start)
+        self._mmc.events.sequenceAcquisitionStopped.disconnect(
+            self._on_streaming_stop)
         self._mmc.events.exposureChanged.disconnect(self._on_exposure_changed)
         self._mmc.mda.events.frameReady.connect(self._on_image_snapped)
 
@@ -502,7 +526,7 @@ class EditRectVisual(EditVisual):
 
     def update_from_controlpoints(self):
         self.rect.width = abs(self.control_points._width)
-        self.rect.height =abs(self.control_points._height)
+        self.rect.height = abs(self.control_points._height)
         self.rect.center = self.control_points.get_center()
 
 
@@ -543,23 +567,25 @@ class ControlPoints(scene.visuals.Compound):
                                self.parent.bounds(0)[0]),
                         0.5 * (self.parent.bounds(1)[1] +
                                self.parent.bounds(1)[0])]
-        self._width = max([1, self.parent.bounds(0)[1] - self.parent.bounds(0)[0]])
-        self._height = max([1, self.parent.bounds(1)[1] - self.parent.bounds(1)[0]])
+        self._width = max(
+            [1, self.parent.bounds(0)[1] - self.parent.bounds(0)[0]])
+        self._height = max(
+            [1, self.parent.bounds(1)[1] - self.parent.bounds(1)[0]])
         # self.update_points()
 
     def update_points(self):
         self.control_points[0].set_data(
-                pos=np.array([[self._center[0] - 0.5 * self._width,
-                            self._center[1] + 0.5 * self._height]]))
+            pos=np.array([[self._center[0] - 0.5 * self._width,
+                           self._center[1] + 0.5 * self._height]]))
         self.control_points[1].set_data(
             pos=np.array([[self._center[0] + 0.5 * self._width,
-                        self._center[1] + 0.5 * self._height]]))
+                           self._center[1] + 0.5 * self._height]]))
         self.control_points[2].set_data(
             pos=np.array([[self._center[0] + 0.5 * self._width,
-                        self._center[1] - 0.5 * self._height]]))
+                           self._center[1] - 0.5 * self._height]]))
         self.control_points[3].set_data(
             pos=np.array([[self._center[0] - 0.5 * self._width,
-                        self._center[1] - 0.5 * self._height]]))
+                           self._center[1] - 0.5 * self._height]]))
 
     def select(self, val, obj=None):
         self.visible(val)
@@ -587,17 +613,24 @@ class ControlPoints(scene.visuals.Compound):
             translate = self.translate_neighbors[self.selected_cp_index]
 
             set_y = self.control_points[self.opposed_cp_index]._data[0][0][1]
-            self.control_points[translate[0]].set_data(pos=np.array([[end[0], set_y]]))
-            
+            self.control_points[translate[0]].set_data(
+                pos=np.array([[end[0], set_y]]))
+
             set_x = self.control_points[self.opposed_cp_index]._data[0][0][0]
-            self.control_points[translate[1]].set_data(pos=np.array([[set_x, end[1]]]))
+            self.control_points[translate[1]].set_data(
+                pos=np.array([[set_x, end[1]]]))
 
-            self.control_points[self.selected_cp_index].set_data(pos=np.array([[end[0], end[1]]]))
+            self.control_points[self.selected_cp_index].set_data(
+                pos=np.array([[end[0], end[1]]]))
 
-            self._width = self.control_points[0]._data[0][0][0] - self.control_points[3]._data[0][0][0]
-            self._height = self.control_points[1]._data[0][0][1] - self.control_points[0]._data[0][0][1]
-            self._center[0] = self.control_points[3]._data[0][0][0] + (self.control_points[0]._data[0][0][0] - self.control_points[3]._data[0][0][0]) / 2
-            self._center[1] = self.control_points[0]._data[0][0][1] + (self.control_points[2]._data[0][0][1] - self.control_points[0]._data[0][0][1]) / 2
+            self._width = self.control_points[0]._data[0][0][0] - \
+                self.control_points[3]._data[0][0][0]
+            self._height = self.control_points[1]._data[0][0][1] - \
+                self.control_points[0]._data[0][0][1]
+            self._center[0] = self.control_points[3]._data[0][0][0] + (
+                self.control_points[0]._data[0][0][0] - self.control_points[3]._data[0][0][0]) / 2
+            self._center[1] = self.control_points[0]._data[0][0][1] + (
+                self.control_points[2]._data[0][0][1] - self.control_points[0]._data[0][0][1]) / 2
 
             self.parent.update_from_controlpoints()
 

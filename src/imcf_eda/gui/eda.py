@@ -1,3 +1,7 @@
+import json
+import pathlib
+import numpy as np
+import zarr
 from qtpy.QtWidgets import (QTabWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QWidget)
 from qtpy.QtCore import Signal  # type:ignore
@@ -10,7 +14,7 @@ from pymmcore_widgets import MDAWidget, LiveButton
 from pymmcore_widgets.mda._save_widget import SaveGroupBox
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.model import (EDASettings, OverviewMDASettings, ScanMDASettings,
-                            AcquisitionMDASettings)
+                            AcquisitionMDASettings, AnalyserSettings)
 from imcf_eda.events import EventHub
 from dataclasses import asdict
 
@@ -71,15 +75,26 @@ class ScanGUI(QWidget):
         self.live_button.setText("Focus")
 
         self.scan_btn = QPushButton("Scan Only")
-        self.scan_btn.setFont(QFont('Times', 16))
+        self.scan_btn.setFont(QFont('Sans Serif', 16))
         self.scan_acq_btn = QPushButton("DualScan")
         self.scan_acq_btn.setFont(QFont('Sans Serif', 16))
-        self.btn_lay = QHBoxLayout()
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setFont(QFont('Sans Serif', 16))
+        self.btn_lay = QVBoxLayout()
         # self.btn_lay.addWidget(self.scan_btn)
-        self.btn_lay.addWidget(self.oil_btn)
-        self.btn_lay.addWidget(self.live_button)   
+        self.prep_btn_lay = QHBoxLayout()
+        self.prep_btn_lay.addWidget(self.oil_btn)
+        self.prep_btn_lay.addWidget(self.live_button)
         # self.btn_lay.addWidget(self.focus_btn)
-        self.btn_lay.addWidget(self.scan_acq_btn)
+        self.acq_btn_lay = QHBoxLayout()
+        self.acq_btn_lay.addWidget(self.scan_btn)
+        self.acq_btn_lay.addWidget(self.scan_acq_btn)
+        self.acq_btn_lay.addWidget(self.cancel_btn)
+
+        self.btn_lay.addLayout(self.prep_btn_lay)
+        self.btn_lay.addLayout(self.acq_btn_lay)
+
         self.lay.addLayout(self.btn_lay)
 
     def update_mda(self):
@@ -115,10 +130,29 @@ class AcquisitionGUI(QWidget):
         self.acq_btn = QPushButton("Acquire")
         self.acq_btn.setFont(QFont('Sans Serif', 16))
         self.lay.addWidget(self.acq_btn)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setFont(QFont('Sans Serif', 16))
+        self.lay.addWidget(self.cancel_btn)
         self.event_hub = event_hub
 
     def update_mda(self):
         self.settings.mda = self.mda.value()
+
+
+class AnalyserGUI(QWidget):
+    def __init__(self, settings: AnalyserSettings):
+        super().__init__()
+        self.setObjectName("AnalysisTab")
+        self.lay = QVBoxLayout()
+        self.setLayout(self.lay)
+
+        self.settings = settings or AnalyserSettings()
+        self.analysis_gui = self.settings.gui.native
+        self.lay.addWidget(self.analysis_gui)
+
+        self.analysis_btn = QPushButton("Analyse")
+        self.lay.addWidget(self.analysis_btn)
 
 
 class EDAGUI(QWidgetRestore):
@@ -137,9 +171,8 @@ class EDAGUI(QWidgetRestore):
         self.save_info.setValue(asdict(settings.save))
 
         self.overview = OverviewGUI(mmc, settings.overview)
-
         self.scan = ScanGUI(mmc, settings.scan)
-
+        self.analysis = AnalyserGUI(settings.analyser)
         self.acquisition = AcquisitionGUI(mmc, event_hub, settings.acquisition)
 
         self.print_btn = QPushButton("Print Settings")
@@ -147,7 +180,7 @@ class EDAGUI(QWidgetRestore):
 
         self.tabs.addTab(self.overview, "Overview")
         self.tabs.addTab(self.scan, "Scan")
-        self.tabs.addTab(self.settings.analyser.gui.native,  # type:ignore
+        self.tabs.addTab(self.analysis,  # type:ignore
                          "Analyser")
         self.tabs.addTab(self.acquisition, "Acquisition")
 
@@ -162,13 +195,8 @@ class EDAGUI(QWidgetRestore):
         pprint(self.settings)
 
 
+# TODO: the loading here might have to go somewhere else
 
-
-#TODO: the loading here might have to go somewhere else
-import zarr
-import numpy as np
-import pathlib
-import json
 
 class QOverview(QWidgetRestore):
     new_fovs = Signal(list)
@@ -188,25 +216,28 @@ class QOverview(QWidgetRestore):
             self.new_fovs.emit(self.overview.fovs)
 
     def load_data(self, data_dir):
-        with open(pathlib.Path(data_dir) / "p0/.zattrs","r") as file:
+        with open(pathlib.Path(data_dir) / "p0/.zattrs", "r") as file:
             metadata = json.load(file)
         zarr_data = zarr.open(data_dir/"p0", mode='r')
         # Convert to numpy array (if needed, this will depend on how the Zarr array is structured)
         data = np.array(zarr_data)
         print(data.shape)
-        scale = [metadata["frame_meta"][0]["pixel_size_um"], metadata["frame_meta"][0]["pixel_size_um"]]
+        scale = [metadata["frame_meta"][0]["pixel_size_um"],
+                 metadata["frame_meta"][0]["pixel_size_um"]]
         print(scale)
         if len(data.shape) == 4:
             shape = data.shape
         else:
             shape = [1]
-        pos = [(metadata["frame_meta"][i]['position']['x'], metadata["frame_meta"][i]['position']['y']) for i in range(shape[0])]
+        pos = [(metadata["frame_meta"][i]['position']['x'],
+                metadata["frame_meta"][i]['position']['y']) for i in range(shape[0])]
         print(pos)
         if len(data.shape) == 4:
             data = data[:, 0, :, :]
         elif len(data.shape) == 2:
             data = np.expand_dims(data, 0)
         self.overview.update_data(pos, data, scale)
+
 
 if __name__ == "__main__":
     from qtpy.QtWidgets import QApplication

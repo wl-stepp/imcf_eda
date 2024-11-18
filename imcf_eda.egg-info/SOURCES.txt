@@ -5,3 +5,4 @@ imcf_eda.egg-info/SOURCES.txt
 imcf_eda.egg-info/dependency_links.txt
 imcf_eda.egg-info/requires.txt
 imcf_eda.egg-info/top_level.txt
+tests/test_writer.py

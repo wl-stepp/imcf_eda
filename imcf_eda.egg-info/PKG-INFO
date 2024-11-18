@@ -12,6 +12,7 @@ Description-Content-Type: text/markdown
 Requires-Dist: useq-schema
 Requires-Dist: numpy
 Requires-Dist: pymmcore-plus
+Requires-Dist: pyyaml
 Provides-Extra: ilp
 Requires-Dist: pulp; extra == "ilp"
 Provides-Extra: pyqt5
