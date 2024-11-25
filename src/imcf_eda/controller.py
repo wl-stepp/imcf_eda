@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from imcf_eda.model import EDASettings
     from typing import List
 from imcf_eda.gui.eda import QOverview
+from imcf_eda.gui.progress import MDAProgress
 import numpy as np
 from threading import Thread
 from pathlib import Path
@@ -95,6 +96,7 @@ class Controller(QObject):
     def scan(self):
         if self.main_overview:
             self.main_overview.mmc_disconnect()
+        prog = MDAProgress(self.mmc)
         path = Path(self.view.save_info.save_dir.text()) / \
             self.view.save_info.save_name.text().split(".")[0]
         print("PATH", path)
@@ -108,6 +110,8 @@ class Controller(QObject):
         self.actuator.scan()
         time.sleep(1)
         self.scan_finished.emit()
+        prog.deleteLater()
+        print('prog asked to close')
 
     def analyse(self):
         # TODO: If we reload this, we should get the positions from the save
@@ -120,10 +124,12 @@ class Controller(QObject):
     def acquire(self):
         print("ACQUIRE")
         print(self.model.acquisition.mda)
-        self.actuator.acquire()
+        prog = MDAProgress()
+        self.actuator.acquire(self.mmc)
         self.actuator.reset_pos()
         if self.main_overview:
             self.main_overview.mmc_connect()
+        prog.close()
 
     def scan_thr(self):
         self.preview.show()
