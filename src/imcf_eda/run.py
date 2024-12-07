@@ -75,7 +75,12 @@ if __name__ == "__main__":
         view = EDAGUI(mmc, settings, event_hub)
         view.scan.mda.setValue(settings.scan.mda)
         # Controller
-        controller = Controller(settings, view, mmc, event_hub)  # , preview)
+        controller = Controller(settings, view, mmc, event_hub, preview)
         view.show()
+        try:
+            mmc.setExposure("HamamatsuHam_DCAM", settings.overview.mda.channels[0].exposure)
+            mmc.setExposure("HamamatsuHam_DCAM-1", settings.overview.mda.channels[0].exposure)
+        except:
+            print("Exposure could not be set, set manually")
 
     app.exec_()  # type: ignore

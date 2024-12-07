@@ -24,7 +24,8 @@ setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
-    packages={'':'src'},
+    packages=find_packages(where='src'),
+    package_dir={'': 'src'},
     install_requires=[
         'useq-schema',
         'numpy',

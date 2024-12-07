@@ -14,6 +14,7 @@ from tensorflow import keras
 
 from imcf_eda.events import EventHub
 from imcf_eda.model import AnalyserSettings
+from imcf_eda.writer import IMCFWriter
 
 
 class MIPAnalyser():
@@ -26,7 +27,7 @@ class MIPAnalyser():
         self.analyse_channel = settings.channel
         self.save_dir = path
         self.path = path / "scan.ome.zarr"
-        self.writer = handlers.OMEZarrWriter(self.path, overwrite=True)
+        self.writer = IMCFWriter(self.path)
 
         self.cameras = []
         self.events = []
@@ -40,8 +41,6 @@ class MIPAnalyser():
 
     def frameReady(self, image: np.ndarray, event: MDAEvent,
                    metadata: FrameMetaV1):
-        self.stack[event.index.get('c', 0), event.index.get('z', 0)] = image
-
         if len(self.cameras) > 1:
             new_index = {
                 **event.index,
@@ -54,10 +53,16 @@ class MIPAnalyser():
             event = event.replace(
                 sequence=self.sequence, index=new_index,
                 channel=dict(new_channel))
+            metadata['mda_event'] = dict(event)
+            metadata['new_index'] = new_index
+        if len(self.cameras) > 1 and event.index.get('c', 0)%2 == 1:
+            image = np.flip(image, -2)
+        self.stack[event.index.get('c', 0), event.index.get('z', 0)] = image
         # Check if we have a full stack
         if event.index.get('z', 0) == max(1, self.sizes.get('z', 0)) - 1:
             print("Full stack received!", self.stack.shape, "Computing MIP...")
             self.mip = np.max(self.stack[event.index.get('c', 0)], axis=0)
+            #Flip y for uneven channels
             self.writer.frameReady(self.mip, event, metadata)
             # Check if the frame is for analysis
             if event.channel.config == self.analyse_channel:
@@ -65,7 +70,6 @@ class MIPAnalyser():
                 self.metadatas.append(metadata)
 
     def sequenceStarted(self, sequence: MDASequence, metadata):
-
         if 'Dual' in sequence.channels[0].config:
             self.cameras = [
                 x["label"]
@@ -86,6 +90,10 @@ class MIPAnalyser():
         self.sequence = sequence
         self.metadata = metadata
         self.sizes = sequence.sizes
+        self.pixel_size = self.mmc.getPixelSizeUm()
+        #TODO, somehow we get pixel size 0.072 here...
+        self.pixel_size = 0.108
+        print("PIXEL SIZE", self.pixel_size)
         self.stack = np.zeros((max(1, self.sizes.get('c', 1)),
                                max(1, self.sizes.get('z', 1)),
                                self.mmc.getImageHeight(),
@@ -95,21 +103,20 @@ class MIPAnalyser():
         self.writer.sequenceFinished(self.sequence)
 
     def analyse(self):
-        self.net_writer = handlers.OMEZarrWriter(
-            self.save_dir / "network.ome.zarr", overwrite=True)
+        self.net_writer = IMCFWriter(
+            self.save_dir / "network.ome.zarr")
         self.net_writer.sequenceStarted(self.sequence, self.metadata)
         for index, event, metadata in zip(range(len(self.events)), self.events,
                                           self.metadatas):
             print(f"{index}/{len(self.events)-1}")
-            pos = event.index['p']
-            mips = zarr.open(str(self.path/("p" + str(pos))), mode='r')
-            index = tuple(event.index[k]
-                          for k in self.writer.position_sizes[pos])
-            mip = mips[(*index, slice(None), slice(None))].copy()
+            mips = zarr.open(str(self.path), mode='r')
+            data_index = tuple(event.index[k] for k in self.sizes)
+            mip = mips[(*data_index, slice(None), slice(None))].copy()
             worker = MIPWorker(mip, event, metadata, self.settings,
-                               self.model, self.event_hub, self.net_writer)
+                               self.model, self.event_hub, self.net_writer, self.pixel_size)
             worker.run()
         self.net_writer.sequenceFinished(self.sequence)
+        self.net_writer.finalize_metadata()
         with open(self.save_dir / "network.ome.zarr/eda_seq.json", "w") as file:
             file.write(self.sequence.model_dump_json())
         self.event_hub.analysis_finished.emit()
@@ -119,7 +126,8 @@ class MIPWorker():
     def __init__(self, mip: np.ndarray, event: MDAEvent, metadata,
                  settings: AnalyserSettings,
                  model: keras.Model,
-                 event_hub: SignalGroup, writer: handlers.OMEZarrWriter):
+                 event_hub: SignalGroup, writer: IMCFWriter,
+                 pixel_size: float):
         self.mip = mip
         self.event = event
         self.metadata = metadata
@@ -127,6 +135,7 @@ class MIPWorker():
         self.model = model
         self.event_hub = event_hub
         self.writer = writer
+        self.pixel_size = pixel_size
 
     def run(self):
         """Get the first pixel value of the passed images and return."""
@@ -140,7 +149,7 @@ class MIPWorker():
         self.writer.frameReady(network_output, self.event, self.metadata)
         network_output = self.post_process_net_out(network_output)
         positions = self.get_positions(network_output)
-        self.event_hub.new_positions.emit(positions)
+        self.event_hub.new_positions.emit(positions, self.pixel_size)
 
     def prepare_image(self, image: np.ndarray):
         """Here if we need to do some preprocessing."""

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: imcf_eda
-Version: 0.1
+Version: 0.2
 Summary: Event-driven acquisition
 Author: Willi L. Stepp
 Author-email: willi.stepp@epfl.ch
@@ -12,6 +12,7 @@ Description-Content-Type: text/markdown
 Requires-Dist: useq-schema
 Requires-Dist: numpy
 Requires-Dist: pymmcore-plus
+Requires-Dist: pyyaml
 Provides-Extra: ilp
 Requires-Dist: pulp; extra == "ilp"
 Provides-Extra: pyqt5

@@ -1,4 +1,4 @@
-from imcf_eda.writer import IMCF_writer
+from imcf_eda.writer import IMCFWriter
 from pymmcore_plus import CMMCorePlus
 from useq import MDASequence
 
@@ -19,7 +19,7 @@ core.setCameraDevice(mc)
 seq = MDASequence(channels=['Dual-GFP-Cy5'])
 
 
-writer = IMCF_writer
+writer = IMCFWriter()
 
 
 core.mda.run(seq, output=writer)

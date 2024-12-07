@@ -27,6 +27,7 @@ viewer = Viewer()
 import useq, json, pathlib
 from napari.experimental import link_layers
 from tqdm import tqdm
+import numpy as np
 
 
 def adjust_one_array(viewer, color = "white"):
@@ -68,44 +69,46 @@ def view_eda_exp(viewer, main_folder = 'F:/eda_data_006'):
         folder = main_folder + '/overview.ome.zarr'
         viewer.open(folder, plugin='napari-ome-zarr')   
         adjust_one_array(viewer)
-    except:
+    except Exception as e:
+        print(e)
         pass
 
     folder = main_folder + '/scan.ome.zarr'
-    load_positions(viewer, folder, "white", name = "Scan")
+    load_positions(viewer, folder, "white", name = "Scan", pixel_size=0.10833)
 
     folder = main_folder + '/network.ome.zarr'
-    load_positions(viewer, folder, "bop orange", name = "Network")
+    load_positions(viewer, folder, "bop orange", name = "Network", pixel_size = 0.10833)
 
     layer = viewer.open(main_folder + "/positions.csv", plugin='napari')[0]
     layer.size = 3
 
     #ACQUISITION
     folder = main_folder + '/acquisition.ome.zarr'
-    load_positions(viewer, folder, "bop blue", {"x_offset": -7, "y_offset": 16,}, name = "Acq")
+    load_positions(viewer, folder, "bop blue", {"x_offset": -7, "y_offset": 16,}, name = "Acq", pixel_size = 0.065)
     viewer.dims.set_current_step(0, 0)
 
-def load_positions(viewer, folder, color='bop blue', offsets ={"x_offset": 0, "y_offset": 0,}, name = "image"):
+def load_positions(viewer, folder, color='bop blue', offsets ={"x_offset": 0, "y_offset": 0,}, name = "image", pixel_size = 0.108):
     seq = useq.MDASequence().from_file(pathlib.Path(folder) / "eda_seq.json")
     layers = []
     print(seq.sizes['p'])
+    main_layer = viewer.open(f"{folder}")[0]
+    array = main_layer.data.copy()
+    print(array.shape)
+    if name in ['Network', 'Scan']:
+        array = array[:, :, -1:, ...]
+    with open(pathlib.Path(folder) / f"eda_seq.json","r") as file:
+        metadata = json.load(file)
     for p in tqdm(range(seq.sizes['p'])):
-        with open(pathlib.Path(folder) / f"p{p}/.zattrs","r") as file:
-            metadata = json.load(file)
-        layer = viewer.open(f"{folder}/p{p}")[0]
-        # if name in ["Scan", "Network"]:
-        #     if len(layer.data.shape) == 4:
-                                
+        layer = viewer.add_image(array[p])
         layer.blending = 'additive'
         layer.colormap = color
         layer.name = name
-        layer.translate = [metadata["frame_meta"][0]["position"]['x'] + layer.data.shape[-2]*metadata["frame_meta"][0]["pixel_size_um"]/2 + offsets["x_offset"],
-                        metadata["frame_meta"][0]["position"]['y'] + layer.data.shape[-1]*metadata["frame_meta"][0]["pixel_size_um"]/2 + offsets["y_offset"]]
+        p_pos = metadata['stage_positions'][p]
+        layer.translate = [p_pos['x'] + layer.data.shape[-2]*pixel_size/2 + offsets["x_offset"],
+                           p_pos['y'] + layer.data.shape[-1]*pixel_size/2 + offsets["y_offset"]]
         layer.rotate = -90
-        if name == "Acq":
-            layer.scale = [0.065, -0.065]
-        else:
-            layer.scale = [metadata["frame_meta"][0]["pixel_size_um"], -metadata["frame_meta"][0]["pixel_size_um"]]
+        layer.scale = [pixel_size, -pixel_size]
         layers.append(layer)
     link_layers(layers)
     layers[-1].contrast_limits_range = [layers[-1].contrast_limits_range[0], layers[-1].contrast_limits[1]]
+    viewer.layers.remove(main_layer)

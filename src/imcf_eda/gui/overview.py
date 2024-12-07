@@ -25,6 +25,7 @@ class Overview(InteractiveCanvas):
                                        anchor_x="left", anchor_y="bottom")
         self.text.transform = transforms.STTransform(translate=(5, 5))
 
+
     def update_data(self, pos, data, scale):
         print("UPDATING DATA")
         for image in self.images:

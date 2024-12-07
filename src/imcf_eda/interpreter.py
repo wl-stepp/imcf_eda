@@ -26,16 +26,16 @@ class PositionInterpreter():
         self.event_hub.new_positions.connect(self.new_positions)
         # self.event_hub.analysis_finished.connect(self.analysis_finished)
 
-    def new_positions(self, positions: list):
+    def new_positions(self, positions: list, pixel_size: float):
         for position in positions:
-            position['x'] = (position['x']*self.mmc.getPixelSizeUm() +
+            position['x'] = (position['x']*pixel_size +
                              position['event'].x_pos -
                              self.mmc.getImageWidth() *
-                             self.mmc.getPixelSizeUm()/2)
-            position['y'] = (position['y']*self.mmc.getPixelSizeUm() +
+                             pixel_size/2)
+            position['y'] = (position['y']*pixel_size +
                              position['event'].y_pos -
                              self.mmc.getImageHeight() *
-                             self.mmc.getPixelSizeUm()/2)
+                             pixel_size/2)
             self.positions.append(position)
 
     def interpret(self):
