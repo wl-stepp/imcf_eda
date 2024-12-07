@@ -115,7 +115,9 @@ def cover_with_squares_min_distance(points, square_size):
 import time
 def cover_with_squares_ilp(points, square_size, plot=False):
     t0 = time.perf_counter()
-    
+    if len(points) == 0:
+        print("WARNING: NO DETECTIONS")
+        return[(0, 0)]
     # Convert points to numpy array for vectorized operations
     points = np.array(points)
     

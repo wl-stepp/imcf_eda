@@ -1,23 +1,32 @@
-from qtpy.QtWidgets import QWidget, QProgressBar, QVBoxLayout, QLabel
+from qtpy.QtWidgets import QWidget, QProgressBar, QGridLayout, QLabel
 import time
 from datetime import timedelta
+from imcf_eda.gui._qt_classes import QWidgetRestore
 
-
-class MDAProgress(QWidget):
+class MDAProgress(QWidgetRestore):
     def __init__(self, mmcore):
         super().__init__()
         self.mmc = mmcore
-        self.lay = QVBoxLayout()
+        self.lay = QGridLayout()
         self.setLayout(self.lay)
 
         self.pos_prog = QProgressBar()
-        self.lay.addWidget(self.pos_prog)
+        self.pos_label = QLabel('P')
+        self.lay.addWidget(self.pos_prog, 0, 1)
+        self.lay.addWidget(self.pos_label, 0, 0)
+
+        self.c_prog = QProgressBar()
+        self.c_label = QLabel('C')
+        self.lay.addWidget(self.c_prog, 1, 1)
+        self.lay.addWidget(self.c_label, 1, 0)
 
         self.z_prog = QProgressBar()
-        self.lay.addWidget(self.z_prog)
+        self.z_label = QLabel('Z')
+        self.lay.addWidget(self.z_prog, 2, 1)
+        self.lay.addWidget(self.z_label, 2, 0)
 
         self.time_est = QLabel()
-        self.lay.addWidget(self.time_est)
+        self.lay.addWidget(self.time_est, 3, 0, 1, 2)
 
         self.mmc.mda.events.sequenceStarted.connect(self.sequenceStarted)
         self.mmc.mda.events.frameReady.connect(self.frameReady)
@@ -31,6 +40,7 @@ class MDAProgress(QWidget):
         self.show()
         self.pos_prog.setMaximum(seq.sizes.get('p', 0))
         self.z_prog.setMaximum(seq.sizes.get('z', 0))
+        self.c_prog.setMaximum(seq.sizes.get('c', 0))
         self.time_est.setText('')
 
     def frameReady(self, frame, event, meta):
@@ -46,10 +56,13 @@ class MDAProgress(QWidget):
             rem_time = self.custom_format_time(seq_time)
             self.time_est.setText("Time Remaining:" + rem_time)
         self.z_prog.setValue(event.index.get('z', 0))
+        self.c_prog.setValue(event.index.get('c', 0))
         self.pos_prog.setValue(event.index.get('p', 0))
 
     def sequenceFinished(self, seq):
         self.pos_prog.setValue(self.pos_prog.maximum())
+        self.c_prog.setValue(self.c_prog.maximum())
+        self.z_prog.setValue(self.z_prog.maximum())
         self.time_est.setText("Time Remaining: 0s")
 
     def custom_format_time(self, seconds):

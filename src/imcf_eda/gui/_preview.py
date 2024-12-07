@@ -24,22 +24,24 @@ class Preview(QWidgetRestore):
     new_mask = QtCore.Signal(np.ndarray)
 
     def __init__(self, parent: QWidget | None = None, mmcore: CMMCorePlus | None = None,
-                 key_listener: QObject | None = None, acq: bool = False):
+                 key_listener: QObject | None = None, acq: bool = False, view_channel: int = 0, settings: dict = None):
         super().__init__(parent=parent)
         self._mmc = mmcore
         self.current_frame = None
-        settings = self.load_settings()
+        if settings is None:
+            settings = self.load_settings()
         self.save_loc = settings.get("path", Path.home())
-        self.rot = settings.get("rot", 90)
+        self.rot = settings.get("rot", 0)
         self.mirror_x = settings.get("mirror_x", False)
         self.mirror_y = settings.get("mirror_y", True)
+        print(self.rot, self.mirror_x, self.mirror_y)
         self.acq = acq
         # self.rot = 90
         # self.mirror_x = False
         # self.mirror_y = True
         if acq:
             self.preview = AcqCanvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
-                                     mirror_y=self.mirror_y, parent=self)
+                                     mirror_y=self.mirror_y, parent=self, view_channel=view_channel)
         else:
             self.preview = Canvas(mmcore=mmcore, rot=self.rot, mirror_x=self.mirror_x,
                                   mirror_y=self.mirror_y, parent=self)
@@ -108,10 +110,10 @@ class Preview(QWidgetRestore):
         except (FileNotFoundError, TypeError, AttributeError, json.decoder.JSONDecodeError) as e:
             print(e)
             print("New Settings for this user")
-            settings_dict = {"path": Path.home() / "Desktop" / "MyTiff.ome.tif",
-                             "rot": 0,
-                             "mirror_x": False,
-                             "mirror_y": False}
+        settings_dict = {"path": Path.home() / "Desktop" / "MyTiff.ome.tif",
+                            "rot": 0,
+                            "mirror_x": False,
+                            "mirror_y": False}
         return settings_dict
 
     def mmc_connect(self):
@@ -148,6 +150,7 @@ class Canvas(QWidget):
         rot: int = 0,
         mirror_x: bool = False,
         mirror_y: bool = False,
+        view_channel: int = 0
     ):
         self.rot = rot
         super().__init__(parent=parent)
@@ -158,6 +161,7 @@ class Canvas(QWidget):
         self._cmap: str = "grays"
         self.last_channel = None
         self.current_channel = self._mmc.getConfigGroupState("Channel")
+        self.view_channel = view_channel
 
         self._canvas = scene.SceneCanvas(
             keys="interactive", size=(512, 512), parent=self
@@ -235,6 +239,7 @@ class Canvas(QWidget):
 
     def _on_streaming_start(self) -> None:
         print("STREAMING STARTED")
+        self.t = 0
         self.streaming_timer.start()
 
     def _on_streaming_stop(self) -> None:
@@ -268,12 +273,18 @@ class Canvas(QWidget):
             self._clim_mode.get(channel, "auto") == "auto")
         self.auto_clim.blockSignals(block)
 
-    def _on_image_snapped(self, img: np.ndarray | None = None, channel: str | None = None) -> None:
+    def _on_image_snapped(self, img: np.ndarray | None = None, channel: str | None = None, meta = None) -> None:
+        if channel and self.view_channel == 0:
+            if channel == self.last_channel:
+                return
+        elif channel and self.view_channel == 1:
+            if channel != self.last_channel:
+                return
         channel = self._mmc.getCurrentConfig("Channel")
         self._adjust_channel(channel)
         if img is None:
             try:
-                img = self._mmc.getLastImage()
+                img = self._mmc.getImage(self.view_channel)
             except (RuntimeError, IndexError):
                 return
         img_max = img.max()
@@ -431,9 +442,10 @@ class AcqCanvas(Canvas):
         rot: int = 0,
         mirror_x: bool = False,
         mirror_y: bool = False,
+        view_channel: int = 0,
     ):
         super().__init__(parent=parent, mmcore=mmcore,
-                         rot=rot, mirror_x=mirror_x, mirror_y=mirror_y)
+                         rot=rot, mirror_x=mirror_x, mirror_y=mirror_y, view_channel=view_channel)
         # self._mmc.events.continuousSequenceAcquisitionStarted.disconnect(
         #     self._on_streaming_start)
         # self._mmc.events.sequenceAcquisitionStopped.disconnect(

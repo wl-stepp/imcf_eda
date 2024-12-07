@@ -5,7 +5,8 @@ from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import handlers, mda_listeners_connected
 from imcf_eda.events import EventHub
 from imcf_eda.model import EDASettings
-import time
+from imcf_eda.writer import IMCFWriter
+import time, os
 
 class SpatialActuator():
     def __init__(self, mmc: CMMCorePlus, event_hub: EventHub,
@@ -31,13 +32,20 @@ class SpatialActuator():
         self.reset_pos()
 
     def scan(self):
-
+        if 'Dual' in self.settings.scan.mda.channels[0].config:
+            self.mmc.setConfig(self.settings.config.camera_setting, 
+                               self.settings.config.camera_dual)
         print("SAVE NAME", self.save_dir)
         self.orig_pos = self.mmc.getXYPosition()
         self.orig_pos_z = self.mmc.getPosition()
+
+        # positions = self.settings.scan.mda.stage_positions
+        # self.settings.scan.mda.replace()
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.scan.parameters.objective)
         time.sleep(0.5)
+        if not (self.save_dir / "scan.ome.zarr").is_dir():
+            os.makedirs(self.save_dir / "scan.ome.zarr", exist_ok=True)
         with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
             file.write(self.settings.scan.mda.model_dump_json())
         with mda_listeners_connected(self.analyser, self.interpreter,
@@ -49,22 +57,26 @@ class SpatialActuator():
         #  while not self.analysis_done:
         #     pass
 
-    def acquire(self):
-        self.acq_writer = handlers.OMEZarrWriter(self.save_dir /
-                                             "acquisition.ome.zarr",
-                                             overwrite=True)
+    def acquire(self, path = None):
+        if 'Dual' in self.settings.acquisition.mda.channels[0].config:
+            self.mmc.setConfig(self.settings.config.camera_setting, 
+                               self.settings.config.camera_dual)
+        if path is None:
+            path = self.save_dir / "acquisition.ome.zarr"
+        self.acq_writer = IMCFWriter(path)
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.acquisition.parameters.objective)
-        with open(self.save_dir / "acquisition.ome.zarr/eda_seq.json",
-                  "w") as file:
+        if not Path(path).is_dir():
+            os.makedirs(path, exist_ok=True)
+        with open(path / "eda_seq.json", "w") as file:
             file.write(self.settings.acquisition.mda.model_dump_json())
         time.sleep(1)
         with mda_listeners_connected(self.acq_writer,
                                      mda_events=self.mmc.mda.events):
             self.mmc.mda.run(self.settings.acquisition.mda)
-        with open(self.save_dir / "acquisition.ome.zarr/eda_seq.json",
-                  "w") as file:
+        with open(path / "eda_seq.json", "w") as file:
             file.write(self.settings.acquisition.mda.model_dump_json())
+        self.acq_writer.finalize_metadata()
         self.analysis_done = False
 
     def reset_pos(self):

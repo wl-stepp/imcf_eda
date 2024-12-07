@@ -43,7 +43,7 @@ class OverviewGUI(QWidget):
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
         # self.prev_btn = QPushButton("Preview")
         self.button = QPushButton("Run Overview")
-        self.button.setFont(QFont('Sans Serif', 16))
+        self.button.setFont(QFont('Sans Serif', 14))
         # self.lay.addWidget(self.prev_btn)
         self.lay.addWidget(self.button)
 
@@ -74,13 +74,13 @@ class ScanGUI(QWidget):
         self.live_button = LiveButton()
         self.live_button.setText("Focus")
 
-        self.scan_btn = QPushButton("Scan Only")
-        self.scan_btn.setFont(QFont('Sans Serif', 16))
-        self.scan_acq_btn = QPushButton("DualScan")
-        self.scan_acq_btn.setFont(QFont('Sans Serif', 16))
+        self.scan_btn = QPushButton("Scan & Analyse")
+        self.scan_btn.setFont(QFont('Sans Serif', 14))
+        self.scan_acq_btn = QPushButton("Scan, Analyse & Acquire")
+        self.scan_acq_btn.setFont(QFont('Sans Serif', 14))
 
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFont(QFont('Sans Serif', 16))
+        self.cancel_btn.setFont(QFont('Sans Serif', 14))
         self.btn_lay = QVBoxLayout()
         # self.btn_lay.addWidget(self.scan_btn)
         self.prep_btn_lay = QHBoxLayout()
@@ -128,11 +128,11 @@ class AcquisitionGUI(QWidget):
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
 
         self.acq_btn = QPushButton("Acquire")
-        self.acq_btn.setFont(QFont('Sans Serif', 16))
+        self.acq_btn.setFont(QFont('Sans Serif', 14))
         self.lay.addWidget(self.acq_btn)
 
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFont(QFont('Sans Serif', 16))
+        self.cancel_btn.setFont(QFont('Sans Serif', 14))
         self.lay.addWidget(self.cancel_btn)
         self.event_hub = event_hub
 

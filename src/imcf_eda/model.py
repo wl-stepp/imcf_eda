@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from dataclasses import dataclass, field, asdict
 from magicgui.experimental import guiclass
 import useq
+import time
 
 
 @guiclass
@@ -15,15 +16,18 @@ class DisplaySettings:
 class ConfigSettings:
     # "C:/Program Files/Micro-Manager-2.0.3_June24/CSU-W1C_4dualcam_piezo.cfg"
     # IMCF
-    # mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
-    # objective_group: str = "4-Objective"
-    # channel_group: str = "3-Channel"
-    # corse_z_stage: str = "ZDrive"
+    mm_config: str | None = "C:\Program Files\Micro-Manager-2.0.3_June24\CSU-W1C_4dualcam_piezo_BF.cfg"
+    objective_group: str = "4-Objective"
+    channel_group: str = "3-Channel"
+    corse_z_stage: str = "ZDrive (Nosepiece)"
+    camera_setting: str = "2-Camera Mode"
+    camera_single: str = "1-Single Camera"
+    camera_dual: str = "2-Dual Camera"
     # DEMO
-    mm_config: str | None = None
-    objective_group: str = "Objective"
-    channel_group: str = "Channel"
-    corse_z_stage: str = "Z"
+    # mm_config: str | None = None
+    # objective_group: str = "Objective"
+    # channel_group: str = "Channel"
+    # corse_z_stage: str = "Z"
     objectives: tuple[str, ...] = ()
     channels: tuple[str, ...] = ()
     pixel_sizes: tuple[str, ...] = ()
@@ -31,6 +35,15 @@ class ConfigSettings:
 
     def __init__(self):
         mmc = CMMCorePlus().instance()
+        loaded = False
+        t0 = time.perf_counter()
+        while not loaded:
+            try:
+                mmc.loadSystemConfiguration(self.mm_config)
+                loaded = True
+            except:
+                time.sleep(3)
+                print("microscope not ready, retry", round(time.perf_counter() - t0))
         self.objectives = mmc.getAvailableConfigs(self.objective_group)
         self.channels = mmc.getAvailableConfigs(self.channel_group)
         self.pixel_sizes = mmc.getAvailablePixelSizeConfigs()
@@ -63,7 +76,7 @@ class OverviewSettings:
 @dataclass
 class OverviewMDASettings:
     parameters: OverviewSettings = field(default_factory=OverviewSettings)
-    mda: useq.MDASequence = field(default_factory=useq.MDASequence)
+    mda: useq.MDASequence = useq.MDASequence(channels=[{"config": "Brightfield", "exposure": 50.0, "group": "3-Channel"}])
 
 
 @guiclass
@@ -71,21 +84,21 @@ class ScanSettings:
     objective: Literal[
         objectives  # type:ignore
     ] = settings.objectives[-2]
-    preview_channel: Literal[channels] = settings.channels[0]
 
 
 @dataclass
 class ScanMDASettings:
     parameters: ScanSettings = field(default_factory=ScanSettings)
-    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 4, "step": 0.3},
-                                             channels=["Dual-GFP-Cy5"])
+    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 25.5, "step": 0.3}, #25.5
+                                             channels=[{"config": "Dual-GFP-Cy5", "exposure": 200, "group": "3-Channel"}],
+                                             axis_order='pcz')
 
 
 @guiclass
 class AnalyserSettings:
-    threshold: float = 0.5
+    threshold: float = 0.2
     closing_kernel: int = 3
-    channel: Literal[analyser_channels] = settings.analyser_channels[0]
+    channel: Literal[analyser_channels] = settings.analyser_channels[8]
     model_path: str = ("F:/imcf_eda/models/"
                        # "unet2d_vish_v8/weights_best.hdf5"
                        "unet2d_vish_v4/keras_weights.hdf5")
@@ -116,13 +129,16 @@ class AcquisitionMDASettings:
     parameters: AcquisitionSettings = field(
         default_factory=AcquisitionSettings)
     mda: useq.MDASequence = useq.MDASequence(
-        z_plan={"range": 4, "step": 0.5}, channels=["4-Cy5", "3-Cy3"])
+        z_plan={"range": 4, "step": 30.5}, #30.5
+        channels=[{"config": "Dual-GFP-Cy5", "exposure": 200, "group": "3-Channel"},
+                  {"config": "Dual-DAPI-Cy3", "exposure": 200, "group": "3-Channel"}],
+        axis_order='pcz')
 
 
 @dataclass
 class SaveInfo:
     save_dir: str = "F:/data"
-    save_name: str = "2410_005"
+    save_name: str = "2412_020"
     format: str = "ome-zarr"
     should_save: bool = True
 

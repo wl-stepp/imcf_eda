@@ -23,6 +23,7 @@ from pymmcore_plus.mda import handlers
 
 from imcf_eda.gui._preview import Preview
 from imcf_eda.gui._qt_classes import PromptWindow
+from imcf_eda.writer import IMCFWriter
 
 
 class Controller(QObject):
@@ -40,32 +41,39 @@ class Controller(QObject):
         self.is_acquiring = False
         self.prompt = None
         self.main_overview = main_overview
+        self.actuator = None
+        self.analyser = None
+        self.interpreter = None
 
         self.fov_select = QOverview()
         self.fov_select.new_fovs.connect(self.rcv_fovs)
 
-        self.preview = Preview(mmcore=self.mmc, acq=True)
+        settings = {"rot": 0, "mirror_x": False, "mirror_y": True}
+        self.preview = Preview(mmcore=self.mmc, acq=True, settings=settings)
+        # self.preview_2 = Preview(mmcore=self.mmc, acq=True, view_channel=1)
 
         self.view.overview.button.pressed.connect(self.run_overview)
         self.view.scan.oil_btn.pressed.connect(self.add_oil)
         self.view.scan.scan_acq_btn.pressed.connect(self.dual_scan)
         self.view.scan.cancel_btn.pressed.connect(self.mmc.mda.cancel)
-        self.view.scan.scan_btn.pressed.connect(self.scan_thr)
+        self.view.scan.scan_btn.pressed.connect(self.scan_and_analysis)
         self.view.analysis.analysis_btn.pressed.connect(self.analyse_thr)
         self.view.acquisition.acq_btn.pressed.connect(self.acquire_thr)
         self.view.acquisition.cancel_btn.pressed.connect(self.mmc.mda.cancel)
         self.analysis_finished.connect(self.update_acq_mda)
+        self.mmc.mda.events.sequenceCanceled.connect(self.cancel_mda)
 
     def run_overview(self):
         overview_mda = self.model.overview.mda
+        overview_mda = overview_mda.replace(stage_positions=())
         self.mmc.setConfig(self.model.config.objective_group,
                            self.model.overview.parameters.objective)
         self.path = Path(self.view.save_info.save_dir.text()) / \
-            self.model.save.save_name.split(".")[0]
-        self.writer = handlers.OMEZarrWriter(self.path /
-                                             "overview.ome.zarr",
-                                             overwrite=True)
+           self.view.save_info.save_name.text().split(".")[0]
+        self.path = self.increment_path(self.path, 'overview.ome.zarr')
+        self.writer = handlers.OMEZarrWriter(self.path / "overview.ome.zarr", overwrite=True)
         self.mmc.run_mda(overview_mda, block=True, output=self.writer)
+        self.fov_select.setWindowTitle("Overview")
         self.fov_select.load_data(self.path/"overview.ome.zarr")
         self.fov_select.show()
 
@@ -82,6 +90,16 @@ class Controller(QObject):
         self.view.tabs.setCurrentIndex(3)
         self.view.acquisition.mda.setValue(self.acq_seq)
 
+    def scan_and_analysis(self):
+        self.path = Path(self.view.save_info.save_dir.text()) / \
+            self.model.save.save_name.split(".")[0]
+        with open(self.path / "settings.yaml", "w") as yaml_file:
+            yaml.dump(self.model.as_dict(), yaml_file,
+                      default_flow_style=False)
+        self.scan_finished.connect(self.analyse_thr)
+        self.scan_thr()
+        self.view.tabs.setCurrentIndex(2)        
+
     def dual_scan(self):
         self.path = Path(self.view.save_info.save_dir.text()) / \
             self.model.save.save_name.split(".")[0]
@@ -94,12 +112,10 @@ class Controller(QObject):
         self.view.tabs.setCurrentIndex(2)
 
     def scan(self):
-        if self.main_overview:
-            self.main_overview.mmc_disconnect()
-        prog = MDAProgress(self.mmc)
+        # prog = MDAProgress(self.mmc)
         path = Path(self.view.save_info.save_dir.text()) / \
             self.view.save_info.save_name.text().split(".")[0]
-        print("PATH", path)
+        path = self.increment_path(path, 'scan.ome.zarr')
         self.analyser = MIPAnalyser(self.mmc, self.event_hub,
                                     self.model.analyser, path)
         self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
@@ -110,12 +126,17 @@ class Controller(QObject):
         self.actuator.scan()
         time.sleep(1)
         self.scan_finished.emit()
-        prog.deleteLater()
-        print('prog asked to close')
+        self.prog.deleteLater()
+
+    def cancel_mda(self):
+        try:
+            self.scan_finished.disconnect(self.analyse_thr)
+        except:
+            print('Analysis was not scheduled')
 
     def analyse(self):
         # TODO: If we reload this, we should get the positions from the save
-        self.analyser.analsye()
+        self.analyser.analyse()
         self.acq_seq = self.interpreter.interpret()
         self.model.acquisition.mda = self.acq_seq
         self.analysis_finished.emit()
@@ -123,21 +144,33 @@ class Controller(QObject):
 
     def acquire(self):
         print("ACQUIRE")
-        print(self.model.acquisition.mda)
-        prog = MDAProgress()
-        self.actuator.acquire(self.mmc)
+        path = Path(self.view.save_info.save_dir.text()) / \
+                self.view.save_info.save_name.text().split(".")[0]
+        if not self.actuator:
+            self.actuator = SpatialActuator(
+                self.mmc, self.event_hub, self.model, self.analyser,
+                self.interpreter, path)
+        self.actuator.acquire(path / "acquisition.ome.zarr")
+        self.prog.deleteLater()
         self.actuator.reset_pos()
         if self.main_overview:
-            self.main_overview.mmc_connect()
-        prog.close()
+            self.main_overview.setWindowTitle("Preview")
+        print("Acquistion Done")
 
     def scan_thr(self):
         self.preview.show()
-        self.preview.setWindowTitle("DualScan")
+        # self.preview_2.show()
+        self.preview.setWindowTitle("Scan SubChannel 0")
+        if self.main_overview:
+            self.main_overview.setWindowTitle("Scan SubChannel 1")
+        # self.preview_2.setWindowTitle("Scan Channel 1")
+        self.prog = MDAProgress(self.mmc)
         self.scan_thread = Thread(target=self.scan)
         self.scan_thread.start()
 
     def analyse_thr(self):
+        if self.main_overview:
+            self.main_overview.setWindowTitle("Preview")
         self.analysis_thread = Thread(target=self.analyse)
         self.analysis_thread.start()
         try:
@@ -146,6 +179,11 @@ class Controller(QObject):
             pass
 
     def acquire_thr(self):
+        self.prog = MDAProgress(self.mmc)
+        self.preview.setWindowTitle("Acquisition SubChannel 0")
+        if self.main_overview:
+            self.main_overview.setWindowTitle("Acquisition SubChannel 1")
+        # self.preview_2.setWindowTitle("Acquisition Channel 1")
         self.acquire_thread = Thread(target=self.acquire)
         self.acquire_thread.start()
         try:
@@ -153,12 +191,25 @@ class Controller(QObject):
         except TypeError:
             pass
 
+    def increment_path(self, path, sub_folder):
+        print("INCREMENT PATH")
+        while (path / sub_folder).is_dir():
+            name = self.view.save_info.save_name.text().split(".")[0]
+            n = int(self.view.save_info.save_name.text().split(".")[0][-3:])
+            name = name[:-3] + str(n+1).zfill(3)
+            self.view.save_info.save_name.setText(name)
+            path = Path(self.view.save_info.save_dir.text()) / \
+                self.view.save_info.save_name.text().split(".")[0]
+        return path
+
     def live(self, objective, channel):
         if not self.is_acquiring:
             # Start the acquisition
 
             self.preview.mmc_connect()
             self.preview.show()
+            # self.preview_2.mmc_connect()
+            # self.preview_2.show()
 
             # Set configuration based on model settings
             self.mmc.setConfig(self.model.config.objective_group, objective)
@@ -173,6 +224,8 @@ class Controller(QObject):
             self.mmc.stopSequenceAcquisition()
             self.preview.mmc_disconnect()
             self.preview.hide()
+            # self.preview_2.mmc_disconnect()
+            # self.preview_2.hide()
             self.is_acquiring = False
 
     def add_oil(self):
