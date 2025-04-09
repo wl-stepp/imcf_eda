@@ -20,21 +20,21 @@ class ConfigSettings:
     # objective_group: str = "4-Objective"
     # channel_group: str = "3-Channel"
     # corse_z_stage: str = "ZDrive (Nosepiece)"
-    # default_analyser_channel_idx = 8
+    # camera_setting: str = "2-Camera Mode"
+    # camera_single: str = "1-Single Camera"
+    # camera_dual: str = "2-Dual Camera"
     # DEMO
-    mm_config: str | None = "/opt/micro-manager/MMConfig_demo.cfg"
+    mm_config: str | None = ""
     objective_group: str = "Objective"
     channel_group: str = "Channel"
     corse_z_stage: str = "Z"
     objectives: tuple[str, ...] = ()
+    camera_setting: str = ""
+    camera_single: str = ""
+    camera_dual: str = ""
     channels: tuple[str, ...] = ()
     pixel_sizes: tuple[str, ...] = ()
     display: DisplaySettings = field(default_factory=DisplaySettings)
-    default_analyser_channel_idx = 0
-
-    camera_setting: str = "2-Camera Mode"
-    camera_single: str = "1-Single Camera"
-    camera_dual: str = "2-Dual Camera"
 
     def __init__(self):
         mmc = CMMCorePlus().instance()
@@ -82,7 +82,7 @@ class OverviewSettings:
 class OverviewMDASettings:
     parameters: OverviewSettings = field(default_factory=OverviewSettings)
     mda: useq.MDASequence = useq.MDASequence(
-        channels=[{"config": "Brightfield", "exposure": 50.0, "group": settings.channel_group}])
+        channels=[{"config": "Brightfield", "exposure": 50.0, "group": "3-Channel"}])
 
 
 @guiclass
@@ -95,9 +95,9 @@ class ScanSettings:
 @dataclass
 class ScanMDASettings:
     parameters: ScanSettings = field(default_factory=ScanSettings)
-    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 2.55, "step": 0.3},  # 25.5
+    mda: useq.MDASequence = useq.MDASequence(z_plan={"range": 25.5, "step": 0.3},  # 25.5
                                              channels=[
-                                                 {"config": "Dual-GFP-Cy5", "exposure": 200, "group": settings.channel_group}],
+                                                 {"config": "Dual-GFP-Cy5", "exposure": 200, "group": "3-Channel"}],
                                              axis_order='pcz')
 
 
@@ -105,7 +105,7 @@ class ScanMDASettings:
 class AnalyserSettings:
     threshold: float = 0.2
     closing_kernel: int = 3
-    channel: Literal[analyser_channels] = settings.analyser_channels[settings.default_analyser_channel_idx]
+    channel: Literal[analyser_channels] = settings.analyser_channels[8]
     model_path: str = ("F:/imcf_eda/models/"
                        # "unet2d_vish_v8/weights_best.hdf5"
                        "unet2d_vish_v4/keras_weights.hdf5")
@@ -136,9 +136,9 @@ class AcquisitionMDASettings:
     parameters: AcquisitionSettings = field(
         default_factory=AcquisitionSettings)
     mda: useq.MDASequence = useq.MDASequence(
-        z_plan={"range": 4, "step": 1},  # 30.5
-        channels=[{"config": "Dual-GFP-Cy5", "exposure": 200, "group": settings.channel_group},
-                  {"config": "Dual-DAPI-Cy3", "exposure": 200, "group": settings.channel_group}],
+        z_plan={"range": 4, "step": 30.5},  # 30.5
+        channels=[{"config": "Dual-GFP-Cy5", "exposure": 200, "group": "3-Channel"},
+                  {"config": "Dual-DAPI-Cy3", "exposure": 200, "group": "3-Channel"}],
         axis_order='pcz')
 
 

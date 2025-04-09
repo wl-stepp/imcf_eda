@@ -1,4 +1,3 @@
-from traceback import extract_stack
 from setuptools import setup, find_packages
 
 packages = find_packages()
@@ -37,7 +36,7 @@ setup(
         'pyqt5': ['PyQt5'],
         'pyqt6': ['PyQt6'],
         'test': ['pytest', 'pytest-qt'],
-        },
+    },
     author="Willi L. Stepp",
     author_email="willi.stepp@epfl.ch",
     python_requires=">=3.10",

@@ -4,6 +4,7 @@ import numpy as np
 import zarr
 from qtpy.QtWidgets import (QTabWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QWidget)
+import os
 from qtpy.QtCore import Signal  # type:ignore
 from qtpy.QtGui import QFont
 from useq import MDASequence

@@ -74,7 +74,6 @@ class Controller(QObject):
         self.path = self.increment_path(self.path, 'overview.ome.zarr')
         self.writer = handlers.OMEZarrWriter(
             self.path / "overview.ome.zarr", overwrite=True)
-        print(overview_mda)
         self.mmc.run_mda(overview_mda, block=True, output=self.writer)
         self.fov_select.setWindowTitle("Overview")
         self.fov_select.load_data(self.path/"overview.ome.zarr")

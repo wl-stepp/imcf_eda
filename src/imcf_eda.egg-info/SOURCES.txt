@@ -17,5 +17,15 @@ src/imcf_eda.egg-info/SOURCES.txt
 src/imcf_eda.egg-info/dependency_links.txt
 src/imcf_eda.egg-info/requires.txt
 src/imcf_eda.egg-info/top_level.txt
+src/imcf_eda/gui/__init__.py
+src/imcf_eda/gui/_preview.py
+src/imcf_eda/gui/_qt_classes.py
+src/imcf_eda/gui/calibrate_obj.py
+src/imcf_eda/gui/eda.py
+src/imcf_eda/gui/main.py
+src/imcf_eda/gui/overview.py
+src/imcf_eda/gui/overview_fov.py
+src/imcf_eda/gui/polygon_canvas.py
+src/imcf_eda/gui/progress.py
 tests/test_dualcam.py
 tests/test_writer.py

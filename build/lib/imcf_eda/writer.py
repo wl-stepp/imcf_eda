@@ -11,19 +11,10 @@ if TYPE_CHECKING:
 
 _NULL = object()
 
-
 class IMCFWriter(TensorStoreHandler):
     def __init__(self, path):
         super().__init__(path=path)
         self.cameras = []
-
-    # @property
-    # def current_sequence(self):
-    #     return self.current_sequence
-    #
-    # @current_sequence.setter
-    # def current_sequence(self, value):
-    #     self.current_sequence = value
 
     def sequenceStarted(self, seq: MDASequence, meta: SummaryMetaV1 | object = _NULL):
         if 'Dual' in seq.channels[0].config:
@@ -43,7 +34,7 @@ class IMCFWriter(TensorStoreHandler):
                     )
             seq = seq.replace(channels=channels)
         super().sequenceStarted(seq, meta)
-        self._current_sequence = seq
+        self.current_sequence = seq
 
     def frameReady(self, frame: np.ndarray, event: MDAEvent, meta: FrameMetaV1 = _NULL):
         if len(self.cameras) > 1:
@@ -54,10 +45,10 @@ class IMCFWriter(TensorStoreHandler):
                     + self.cameras.index(meta.get("camera_device") or "0")
                 ),
             }
-            new_channel = self._current_sequence.channels[new_index['c']]
+            new_channel = self.current_sequence.channels[new_index['c']]
             event = event.replace(
-                sequence=self._current_sequence, index=new_index, channel={'config': new_channel.config})
-        if len(self.cameras) > 1 and event.index.get('c', 0) % 2 == 1:
+                sequence=self.current_sequence, index=new_index, channel={'config': new_channel.config})
+        if len(self.cameras) > 1 and event.index.get('c', 0)%2 == 1:
             frame = np.flip(frame, -2)
         super().frameReady(frame, event, meta)
 

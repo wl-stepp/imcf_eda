@@ -4,13 +4,11 @@ if TYPE_CHECKING:
     from imcf_eda.model import ConfigSettings
 
 
-def init_microscope(mmc, settings: ConfigSettings | None = None):
-    print("settings: ", settings)
+def init_microscope(mmc, settings: ConfigSettings = None):
     if settings is None:
-        mmc.loadSystemConfiguration('/opt/micro-manager/MMConfig_demo.cfg')
+        mmc.loadSystemConfiguration()
         mmc.setProperty("Camera", "OnCameraCCDXSize", 9*256)
         mmc.setProperty("Camera", "OnCameraCCDYSize", 9*256)
-        print("camera set to 9*256 pixel")
         return
     elif settings is False:
         pass
