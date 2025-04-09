@@ -8,6 +8,7 @@ from imcf_eda.model import EDASettings
 from imcf_eda.writer import IMCFWriter
 import time
 import os
+import json
 
 
 class SpatialActuator():
@@ -46,25 +47,29 @@ class SpatialActuator():
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.scan.parameters.objective)
         time.sleep(0.5)
-        if not (self.save_dir / "scan.ome.zarr").is_dir():
-            os.makedirs(self.save_dir / "scan.ome.zarr", exist_ok=True)
-        with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
-            file.write(self.settings.scan.mda.model_dump_json())
         with mda_listeners_connected(self.analyser, self.interpreter,
                                      mda_events=self.mmc.mda.events):
             print("Running Scan")
             self.mmc.mda.run(self.settings.scan.mda)
+        with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
+            json.dump(self.settings.scan.mda.model_dump(), file)
         print("Going back to z", self.orig_pos_z)
         self.mmc.setPosition(self.orig_pos_z)
         #  while not self.analysis_done:
         #     pass
 
     def acquire(self, path=None):
+        if path is None:
+            path = self.save_dir / "acquisition.ome.zarr"
+        with open(self.save_dir / "imaging_sequence.json", "r") as file:
+            seq = MDASequence.model_validate(json.load(file))
+            print('loaded positions', seq.stage_positions)
+            new_seq = self.settings.acquisition.mda.replace(stage_positions=seq.stage_positions)
+            self.settings.acquisition.mda = new_seq
         if 'Dual' in self.settings.acquisition.mda.channels[0].config:
             self.mmc.setConfig(self.settings.config.camera_setting,
                                self.settings.config.camera_dual)
-        if path is None:
-            path = self.save_dir / "acquisition.ome.zarr"
+
         self.acq_writer = IMCFWriter(path)
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.acquisition.parameters.objective)

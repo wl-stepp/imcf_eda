@@ -14,7 +14,7 @@ _NULL = object()
 
 class IMCFWriter(TensorStoreHandler):
     def __init__(self, path):
-        super().__init__(path=path)
+        super().__init__(path=path, delete_existing=True)
         self.cameras = []
 
     # @property

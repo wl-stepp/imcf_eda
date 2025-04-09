@@ -3,6 +3,7 @@ from pathlib import Path
 import csv
 
 import numpy as np
+import json
 
 from pymmcore_plus import CMMCorePlus
 from psygnal import SignalGroup
@@ -78,7 +79,8 @@ class PositionInterpreter():
         print(f"IMAGING AT {len(squares)} positions:", squares)
         print(self.mda.model_dump_json())
         new_sequence = self.mda.replace(stage_positions=squares)
-
+        with open(self.save_dir / "imaging_sequence.json", "w") as file:
+            json.dump(new_sequence.model_dump(), file)
         return new_sequence
 
     # def analysis_finished(self):

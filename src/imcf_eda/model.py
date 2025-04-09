@@ -103,6 +103,7 @@ class ScanMDASettings:
 
 @guiclass
 class AnalyserSettings:
+    mode: bool = settings.corse_z_stage == "Z"
     threshold: float = 0.2
     closing_kernel: int = 3
     channel: Literal[analyser_channels] = settings.analyser_channels[settings.default_analyser_channel_idx]

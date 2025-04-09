@@ -1,26 +1,11 @@
 def adjust_demo_config(mmc):
-    mc = "YoMulti"
-    mmc.loadDevice("Camera2", "DemoCamera", "DCam")
-    mmc.loadDevice(mc, "Utilities", "Multi Camera")
-    mmc.initializeDevice(mc)
-    mmc.initializeDevice("Camera2")
-    mmc.setProperty("Camera2", "OnCameraCCDXSize", 9*256)
+    mmc.setProperty("Camera2", "OnCameraCCDXSize", str(9*256))
+    mmc.setProperty("Camera", "OnCameraCCDXSize", 9*256)
     mmc.setProperty("Camera2", "OnCameraCCDYSize", 9*256)
+    output = mmc.setProperty("Camera", "OnCameraCCDYSize", 9*256)
+    print(output, "FROM SETTING CAMERA")
     mmc.setProperty("Camera2", "BitDepth", "16")
-    mmc.setProperty(mc, "Physical Camera 1", "Camera")
-    mmc.setProperty(mc, "Physical Camera 2", "Camera2")
-    mmc.setCameraDevice(mc)
-    configs = mmc.getConfigState("Channel", "DAPI")
-    config_names = ["Dual-GFP-Cy5", '1', '2', '3', '4']
-    for name in config_names:
-        for config in configs:
-            device = config[0]
-            property = config[1]
-            value = config[2]
-            mmc.defineConfig("Channel", name,
-                             device, property, value)
-    mmc.setConfig("Channel", "Dual-GFP-Cy5")
-    print('Dual config added')
+    mmc.setProperty("Camera", "BitDepth", "16")
 
 
 if __name__ == "__main__":
@@ -32,10 +17,10 @@ if __name__ == "__main__":
     mmc = CMMCorePlus().instance()
     mmc.setDeviceAdapterSearchPaths(["/opt/micro-manager/"] +
                                     list(mmc.getDeviceAdapterSearchPaths()))
+    print("ARGUMENT", sys.argv[1])
+    print(sys.argv[1] == "demo")
     if sys.argv[1] == "demo":
         init_microscope(mmc, None)
-        adjust_demo_config(mmc)
-        print(mmc.getConfigState("Channel", "Dual-GFP-Cy5"))
 
     from imcf_eda.model import EDASettings
     from imcf_eda.controller import Controller
@@ -70,6 +55,10 @@ if __name__ == "__main__":
         from imcf_eda.gui.main import MainWindow
         window = MainWindow(mmc)
         window.show()
+        
+        from pymmcore_widgets import PropertyBrowser
+        pb = PropertyBrowser()
+        pb.show()
 
         from imcf_eda.gui._preview import Preview
         preview = Preview(mmcore=mmc)
@@ -88,5 +77,6 @@ if __name__ == "__main__":
                             settings.overview.mda.channels[0].exposure)
         except:
             print("Exposure could not be set, set manually")
+        adjust_demo_config(mmc)
 
     app.exec_()  # type: ignore

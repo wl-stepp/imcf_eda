@@ -2,8 +2,10 @@ from pathlib import Path
 
 from pymmcore_plus.metadata.schema import FrameMetaV1
 
+import time
 import zarr
 import numpy as np
+import json
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import handlers
 from useq import MDAEvent, MDASequence
@@ -37,7 +39,8 @@ class MIPAnalyser():
         self.model = keras.models.load_model(
             settings.model_path, compile=False)
         self.model.predict(np.random.randint(100, 300, ((1, 256, 256, 1))))
-        self.sequence = MDASequence()
+        self.sequence = None
+        self.pixel_size = None
 
     def frameReady(self, image: np.ndarray, event: MDAEvent,
                    metadata: FrameMetaV1):
@@ -100,12 +103,21 @@ class MIPAnalyser():
                                self.mmc.getImageWidth()), dtype=np.uint16)
 
     def sequenceFinished(self):
+        events_dict = [event.model_dump() for event in self.events]
+        with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "w") as file:
+            json.dump(events_dict, file)
+        with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "w") as file:
+            json.dump(self.metadatas, file, cls=MixedEncoder)
         self.writer.sequenceFinished(self.sequence)
 
     def analyse(self):
         self.net_writer = IMCFWriter(
             self.save_dir / "network.ome.zarr")
+        if not self.events:
+            self._init_from_save()
+
         self.net_writer.sequenceStarted(self.sequence, self.metadata)
+        print("ANALYSE", self.events)
         for index, event, metadata in zip(range(len(self.events)), self.events,
                                           self.metadatas):
             print(f"{index}/{len(self.events)-1}")
@@ -120,6 +132,23 @@ class MIPAnalyser():
         with open(self.save_dir / "network.ome.zarr/eda_seq.json", "w") as file:
             file.write(self.sequence.model_dump_json())
         self.event_hub.analysis_finished.emit()
+
+    def _init_from_save(self):
+        with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "r") as file:
+            events_dict = json.load(file)
+        self.events = [MDAEvent.model_validate(event_data) for event_data in events_dict]
+        with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "r") as file:
+            models = {"MDAEvent": MDAEvent}
+            self.metadatas = json.load(file, object_hook=mixed_decoder(models))
+        
+        if not self.sequence:
+            with open(self.save_dir/"scan.ome.zarr/eda_seq.json", "r") as file:
+                self.sequence = MDASequence.model_validate(json.load(file))
+            self.metadata = self.sequence.metadata
+            self.sizes = self.sequence.sizes
+        if not self.pixel_size:
+            self.pixel_size = 0.108
+
 
 
 class MIPWorker():
@@ -144,10 +173,21 @@ class MIPWorker():
         if self.model.layers[0].input_shape[0] is None:
             image = image[0, :, :, 0]
         else:
-            network_output = network_output.reshape(
-                (9, 9, 256, 256)).swapaxes(2, 1).reshape((2304, 2304))
+            try:
+                network_output = network_output.reshape(
+                    (9, 9, 256, 256)).swapaxes(2, 1).reshape((2304, 2304))
+            except ValueError:
+                network_output = network_output.reshape(
+                    (2, 2, 256, 256)).swapaxes(2, 1).reshape((512, 512))
         self.writer.frameReady(network_output, self.event, self.metadata)
-        network_output = self.post_process_net_out(network_output)
+        if not self.settings.mode:
+            network_output = self.post_process_net_out(network_output)
+        else:
+            network_output[network_output <
+                           self.settings.threshold] = 0
+            network_output[network_output >=
+                           self.settings.threshold] = 1
+        print('max network value:', network_output.max())
         positions = self.get_positions(network_output)
         self.event_hub.new_positions.emit(positions, self.pixel_size)
 
@@ -159,8 +199,12 @@ class MIPWorker():
         if self.model.layers[0].input_shape[0] is None:
             image = np.expand_dims(image, [0, -1])
         else:
-            image = image.reshape((9, 256, 9, 256)).swapaxes(
-                1, 2).reshape((81, 256, 256))
+            try:
+                image = image.reshape((9, 256, 9, 256)).swapaxes(
+                    1, 2).reshape((81, 256, 256))
+            except ValueError:
+                image = image.reshape((2, 256, 2, 256)).swapaxes(
+                    1, 2).reshape((4, 256, 256))
         return image
 
     def post_process_net_out(self, network_output: np.ndarray):
@@ -192,10 +236,14 @@ class MIPWorker():
             network_output = np.flipud(network_output)
         if self.settings.orientation.fliplr:
             network_output = np.fliplr(network_output)
+        print('getting positions', network_output.max())
+        print('min', network_output.min())
         label_image, _ = measure.label(network_output, connectivity=2,
                                        return_num=True)
+        
         # Calculate properties of labeled regions
         regions = measure.regionprops(label_image)
+        print("regions", len(regions))
         # TODO: the mean intensity does not make sense yet, as it is a binary
         positions = [{'x': region.centroid[0], 'y': region.centroid[1], 'z': 0,
                       'score': 1, 'event': self.event} for region in regions]
@@ -216,3 +264,25 @@ class MIPWorker():
         # x, y, z, score = [2304/2, 2304/2, 0, 100]
         # positions.append({'x': x, 'y': y, 'z': z, 'score': score, 'event': self.event})
         return positions
+
+from pydantic import BaseModel
+class MixedEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, BaseModel):
+            # Tag Pydantic models with their class name
+            return {
+                "__pydantic_type__": obj.__class__.__name__,
+                "data": obj.model_dump()
+            }
+        return super().default(obj)
+
+# Custom decoder for loading
+def mixed_decoder(model_classes):
+    def decode_object(obj):
+        if isinstance(obj, dict) and "__pydantic_type__" in obj:
+            model_name = obj["__pydantic_type__"]
+            if model_name in model_classes:
+                # Recreate the Pydantic model from stored data
+                return model_classes[model_name].model_validate(obj["data"])
+        return obj
+    return decode_object

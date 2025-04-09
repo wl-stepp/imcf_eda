@@ -130,6 +130,7 @@ class Controller(QObject):
             self.mmc, self.event_hub, self.model, self.analyser,
             self.interpreter, path)
         self.actuator.scan()
+        print("SCAN ACTUATOR RETURNED")
         time.sleep(1)
         self.scan_finished.emit()
         self.prog.deleteLater()
@@ -142,6 +143,15 @@ class Controller(QObject):
 
     def analyse(self):
         # TODO: If we reload this, we should get the positions from the save
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        if not self.analyser:   
+            self.analyser = MIPAnalyser(self.mmc, self.event_hub,
+                                    self.model.analyser, path)
+        if not self.interpreter:
+            self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
+                                               self.model.acquisition, path)
+
         self.analyser.analyse()
         self.acq_seq = self.interpreter.interpret()
         self.model.acquisition.mda = self.acq_seq
