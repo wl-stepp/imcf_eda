@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 import zarr
 from qtpy.QtWidgets import (QTabWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                            QWidget)
+                            QWidget, QCheckBox)
 import os
 from qtpy.QtCore import Signal  # type:ignore
 from qtpy.QtGui import QFont
@@ -11,13 +11,15 @@ from useq import MDASequence
 
 from imcf_eda.gui._qt_classes import QWidgetRestore, set_dark
 from imcf_eda.gui.overview import Overview
-from pymmcore_widgets import MDAWidget, LiveButton
+from pymmcore_widgets import MDAWidget
+from pymmcore_widgets import LiveButton
 from pymmcore_widgets.mda._save_widget import SaveGroupBox
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.model import (EDASettings, OverviewMDASettings, ScanMDASettings,
                             AcquisitionMDASettings, AnalyserSettings)
 from imcf_eda.events import EventHub
 from dataclasses import asdict
+from superqt.utils import signals_blocked
 
 
 class OverviewGUI(QWidget):
@@ -75,28 +77,13 @@ class ScanGUI(QWidget):
         self.live_button = LiveButton()
         self.live_button.setText("Focus")
 
-        self.scan_btn = QPushButton("Scan & Analyse")
-        self.scan_btn.setFont(QFont('Sans Serif', 14))
-        self.scan_acq_btn = QPushButton("Scan, Analyse & Acquire")
-        self.scan_acq_btn.setFont(QFont('Sans Serif', 14))
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFont(QFont('Sans Serif', 14))
-        self.btn_lay = QVBoxLayout()
         # self.btn_lay.addWidget(self.scan_btn)
         self.prep_btn_lay = QHBoxLayout()
         self.prep_btn_lay.addWidget(self.oil_btn)
         self.prep_btn_lay.addWidget(self.live_button)
         # self.btn_lay.addWidget(self.focus_btn)
-        self.acq_btn_lay = QHBoxLayout()
-        self.acq_btn_lay.addWidget(self.scan_btn)
-        self.acq_btn_lay.addWidget(self.scan_acq_btn)
-        self.acq_btn_lay.addWidget(self.cancel_btn)
 
-        self.btn_lay.addLayout(self.prep_btn_lay)
-        self.btn_lay.addLayout(self.acq_btn_lay)
-
-        self.lay.addLayout(self.btn_lay)
+        self.lay.addLayout(self.prep_btn_lay)
 
     def update_mda(self):
         self.settings.mda = self.mda.value()
@@ -123,18 +110,9 @@ class AcquisitionGUI(QWidget):
         self.mda.valueChanged.connect(self.update_mda)
 
         self.lay.addWidget(self.mda)
-
         self.mda.setValue(self.settings.mda)
-
         self.lay.addWidget(self.settings.parameters.gui.native)  # type:ignore
 
-        self.acq_btn = QPushButton("Acquire")
-        self.acq_btn.setFont(QFont('Sans Serif', 14))
-        self.lay.addWidget(self.acq_btn)
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setFont(QFont('Sans Serif', 14))
-        self.lay.addWidget(self.cancel_btn)
         self.event_hub = event_hub
 
     def update_mda(self):
@@ -152,9 +130,6 @@ class AnalyserGUI(QWidget):
         self.analysis_gui = self.settings.gui.native
         self.lay.addWidget(self.analysis_gui)
 
-        self.analysis_btn = QPushButton("Analyse")
-        self.lay.addWidget(self.analysis_btn)
-
 
 class EDAGUI(QWidgetRestore):
     def __init__(self, mmc: CMMCorePlus,
@@ -171,6 +146,8 @@ class EDAGUI(QWidgetRestore):
         self.save_info = SaveGroupBox(parent=self)
         self.save_info.setValue(asdict(settings.save))
 
+        self.load_btn = QPushButton("Load Positions")
+
         self.overview = OverviewGUI(mmc, settings.overview)
         self.scan = ScanGUI(mmc, settings.scan)
         self.analysis = AnalyserGUI(settings.analyser)
@@ -185,10 +162,28 @@ class EDAGUI(QWidgetRestore):
                          "Analyser")
         self.tabs.addTab(self.acquisition, "Acquisition")
 
+        self.start_btn = QPushButton("Start")
+        self.cancel_btn = QPushButton("Cancel")
+
+        self.acq_btn_lay = QHBoxLayout()
+        self.acq_btn_lay.addWidget(self.start_btn)
+        self.acq_btn_lay.addWidget(self.cancel_btn)
+
+        self.modes_lay = QVBoxLayout()
+        self.do_scan = QCheckBox('Scan')
+        self.modes_lay.addWidget(self.do_scan)
+        self.do_analyse = QCheckBox('Analyse')
+        self.modes_lay.addWidget(self.do_analyse)
+        self.do_acquire = QCheckBox('Acquire')
+        self.modes_lay.addWidget(self.do_acquire)
+
         self.lay = QVBoxLayout()
         self.setLayout(self.lay)
         self.lay.addWidget(self.save_info)
+        self.lay.addWidget(self.load_btn)
         self.lay.addWidget(self.tabs)
+        self.lay.addLayout(self.acq_btn_lay)
+        self.lay.addLayout(self.modes_lay)
         self.lay.addWidget(self.print_btn)
 
     def print_settings(self):

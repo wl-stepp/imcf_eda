@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from pathlib import Path
 
 from pymmcore_plus.metadata.schema import FrameMetaV1
@@ -58,14 +59,14 @@ class MIPAnalyser():
                 channel=dict(new_channel))
             metadata['mda_event'] = dict(event)
             metadata['new_index'] = new_index
-        if len(self.cameras) > 1 and event.index.get('c', 0)%2 == 1:
+        if len(self.cameras) > 1 and event.index.get('c', 0) % 2 == 1:
             image = np.flip(image, -2)
         self.stack[event.index.get('c', 0), event.index.get('z', 0)] = image
         # Check if we have a full stack
         if event.index.get('z', 0) == max(1, self.sizes.get('z', 0)) - 1:
             print("Full stack received!", self.stack.shape, "Computing MIP...")
             self.mip = np.max(self.stack[event.index.get('c', 0)], axis=0)
-            #Flip y for uneven channels
+            # Flip y for uneven channels
             self.writer.frameReady(self.mip, event, metadata)
             # Check if the frame is for analysis
             if event.channel.config == self.analyse_channel:
@@ -94,7 +95,7 @@ class MIPAnalyser():
         self.metadata = metadata
         self.sizes = sequence.sizes
         self.pixel_size = self.mmc.getPixelSizeUm()
-        #TODO, somehow we get pixel size 0.072 here...
+        # TODO, somehow we get pixel size 0.072 here...
         self.pixel_size = 0.108
         print("PIXEL SIZE", self.pixel_size)
         self.stack = np.zeros((max(1, self.sizes.get('c', 1)),
@@ -129,18 +130,19 @@ class MIPAnalyser():
             worker.run()
         self.net_writer.sequenceFinished(self.sequence)
         self.net_writer.finalize_metadata()
-        with open(self.save_dir / "network.ome.zarr/eda_seq.json", "w") as file:
-            file.write(self.sequence.model_dump_json())
+        with open(self.save_dir / "scan_seq.json", "w") as file:
+            json.dump(self.sequence.model_dump(), file)
         self.event_hub.analysis_finished.emit()
 
     def _init_from_save(self):
         with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "r") as file:
             events_dict = json.load(file)
-        self.events = [MDAEvent.model_validate(event_data) for event_data in events_dict]
+        self.events = [MDAEvent.model_validate(
+            event_data) for event_data in events_dict]
         with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "r") as file:
             models = {"MDAEvent": MDAEvent}
             self.metadatas = json.load(file, object_hook=mixed_decoder(models))
-        
+
         if not self.sequence:
             with open(self.save_dir/"scan.ome.zarr/eda_seq.json", "r") as file:
                 self.sequence = MDASequence.model_validate(json.load(file))
@@ -148,7 +150,6 @@ class MIPAnalyser():
             self.sizes = self.sequence.sizes
         if not self.pixel_size:
             self.pixel_size = 0.108
-
 
 
 class MIPWorker():
@@ -240,7 +241,7 @@ class MIPWorker():
         print('min', network_output.min())
         label_image, _ = measure.label(network_output, connectivity=2,
                                        return_num=True)
-        
+
         # Calculate properties of labeled regions
         regions = measure.regionprops(label_image)
         print("regions", len(regions))
@@ -265,7 +266,7 @@ class MIPWorker():
         # positions.append({'x': x, 'y': y, 'z': z, 'score': score, 'event': self.event})
         return positions
 
-from pydantic import BaseModel
+
 class MixedEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, BaseModel):
@@ -277,6 +278,8 @@ class MixedEncoder(json.JSONEncoder):
         return super().default(obj)
 
 # Custom decoder for loading
+
+
 def mixed_decoder(model_classes):
     def decode_object(obj):
         if isinstance(obj, dict) and "__pydantic_type__" in obj:

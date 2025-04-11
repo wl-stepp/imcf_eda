@@ -55,7 +55,7 @@ if __name__ == "__main__":
         from imcf_eda.gui.main import MainWindow
         window = MainWindow(mmc)
         window.show()
-        
+
         from pymmcore_widgets import PropertyBrowser
         pb = PropertyBrowser()
         pb.show()

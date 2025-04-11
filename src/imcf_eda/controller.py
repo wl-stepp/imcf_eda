@@ -11,7 +11,7 @@ from imcf_eda.gui.progress import MDAProgress
 import numpy as np
 from threading import Thread
 from pathlib import Path
-import yaml
+import json
 
 from imcf_eda.actuator import SpatialActuator
 from imcf_eda.analyser import MIPAnalyser
@@ -20,10 +20,10 @@ import time
 from imcf_eda.events import EventHub
 
 from pymmcore_plus.mda import handlers
+from useq import MDASequence
 
 from imcf_eda.gui._preview import Preview
 from imcf_eda.gui._qt_classes import PromptWindow
-from imcf_eda.writer import IMCFWriter
 
 
 class Controller(QObject):
@@ -54,13 +54,10 @@ class Controller(QObject):
 
         self.view.overview.button.pressed.connect(self.run_overview)
         self.view.scan.oil_btn.pressed.connect(self.add_oil)
-        self.view.scan.scan_acq_btn.pressed.connect(self.dual_scan)
-        self.view.scan.cancel_btn.pressed.connect(self.mmc.mda.cancel)
-        self.view.scan.scan_btn.pressed.connect(self.scan_and_analysis)
-        self.view.analysis.analysis_btn.pressed.connect(self.analyse_thr)
-        self.view.acquisition.acq_btn.pressed.connect(self.acquire_thr)
-        self.view.acquisition.cancel_btn.pressed.connect(self.mmc.mda.cancel)
-        self.analysis_finished.connect(self.update_acq_mda)
+        self.view.start_btn.pressed.connect(self.start)
+        self.view.cancel_btn.pressed.connect(self.mmc.mda.cancel)
+        self.view.load_btn.pressed.connect(self._load_pos)
+        self.analysis_finished.connect(self._load_pos)
         self.mmc.mda.events.sequenceCanceled.connect(self.cancel_mda)
 
     def run_overview(self):
@@ -88,40 +85,26 @@ class Controller(QObject):
         scan_mda = scan_mda.replace(stage_positions=all_fovs)
         self.view.scan.mda.setValue(scan_mda)
         self.model.scan.mda = scan_mda
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        with open(path / "scan_seq.json", "w") as file:
+            json.dump(self.model.scan.mda.model_dump(), file)
 
-    def update_acq_mda(self):
-        self.view.tabs.setCurrentIndex(3)
-        self.view.acquisition.mda.setValue(self.acq_seq)
-
-    def scan_and_analysis(self):
-        self.mmc.stopSequenceAcquisition()
-        self.path = Path(self.view.save_info.save_dir.text()) / \
-            self.model.save.save_name.split(".")[0]
-        with open(self.path / "settings.yaml", "w") as yaml_file:
-            yaml.dump(self.model.as_dict(), yaml_file,
-                      default_flow_style=False)
-        self.scan_finished.connect(self.analyse_thr)
-        self.scan_thr()
-        self.view.tabs.setCurrentIndex(2)
-
-    def dual_scan(self):
-        self.mmc.stopSequenceAcquisition()
-        self.path = Path(self.view.save_info.save_dir.text()) / \
-            self.model.save.save_name.split(".")[0]
-        with open(self.path / "settings.yaml", "w") as yaml_file:
-            yaml.dump(self.model.as_dict(), yaml_file,
-                      default_flow_style=False)
-        self.scan_finished.connect(self.analyse_thr)
-        self.analysis_finished.connect(self.acquire_thr)
-        self.scan_thr()
-        self.view.tabs.setCurrentIndex(2)
+    def start(self):
+        if self.view.do_analyse.isChecked():
+            self.scan_finished.connect(self.analyse_thr)
+        if self.view.do_acquire.isChecked():
+            self.analysis_finished.connect(self.acquire_thr)
+        if not self.view.do_scan.isChecked():
+            self.analyse_thr()
+        else:
+            self.scan_thr()
 
     def scan(self):
         self.mmc.stopSequenceAcquisition()
-        # prog = MDAProgress(self.mmc)
+        self.prog = MDAProgress(self.mmc)
         path = Path(self.view.save_info.save_dir.text()) / \
             self.view.save_info.save_name.text().split(".")[0]
-        path = self.increment_path(path, 'scan.ome.zarr')
         self.analyser = MIPAnalyser(self.mmc, self.event_hub,
                                     self.model.analyser, path)
         self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
@@ -129,11 +112,12 @@ class Controller(QObject):
         self.actuator = SpatialActuator(
             self.mmc, self.event_hub, self.model, self.analyser,
             self.interpreter, path)
-        self.actuator.scan()
+        if self.view.do_scan.isChecked():
+            self.actuator.scan()
         print("SCAN ACTUATOR RETURNED")
         time.sleep(1)
-        self.scan_finished.emit()
         self.prog.deleteLater()
+        self.scan_finished.emit()
 
     def cancel_mda(self):
         try:
@@ -142,16 +126,14 @@ class Controller(QObject):
             print('Analysis was not scheduled')
 
     def analyse(self):
-        # TODO: If we reload this, we should get the positions from the save
         path = Path(self.view.save_info.save_dir.text()) / \
             self.view.save_info.save_name.text().split(".")[0]
-        if not self.analyser:   
+        if not self.analyser:
             self.analyser = MIPAnalyser(self.mmc, self.event_hub,
-                                    self.model.analyser, path)
+                                        self.model.analyser, path)
         if not self.interpreter:
             self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
-                                               self.model.acquisition, path)
-
+                                                   self.model.acquisition, path)
         self.analyser.analyse()
         self.acq_seq = self.interpreter.interpret()
         self.model.acquisition.mda = self.acq_seq
@@ -167,6 +149,7 @@ class Controller(QObject):
             self.actuator = SpatialActuator(
                 self.mmc, self.event_hub, self.model, self.analyser,
                 self.interpreter, path)
+        self.actuator.settings.acquisition.mda = self.view.acquisition.mda.value()
         self.actuator.acquire(path / "acquisition.ome.zarr")
         self.prog.deleteLater()
         self.actuator.reset_pos()
@@ -186,6 +169,9 @@ class Controller(QObject):
         self.scan_thread.start()
 
     def analyse_thr(self):
+        if not self.view.do_analyse.isChecked():
+            self.analysis_finished.emit()
+            return
         if self.main_overview:
             self.main_overview.setWindowTitle("Preview")
         self.analysis_thread = Thread(target=self.analyse)
@@ -196,11 +182,11 @@ class Controller(QObject):
             pass
 
     def acquire_thr(self):
-        self.prog = MDAProgress(self.mmc)
         self.preview.setWindowTitle("Acquisition SubChannel 0")
         if self.main_overview:
             self.main_overview.setWindowTitle("Acquisition SubChannel 1")
         # self.preview_2.setWindowTitle("Acquisition Channel 1")
+        self.prog = MDAProgress(self.mmc)
         self.acquire_thread = Thread(target=self.acquire)
         self.acquire_thread.start()
         try:
@@ -269,3 +255,23 @@ class Controller(QObject):
         self.mmc.setXYPosition(pos.x, pos.y)
         time.sleep(1)
         self.mmc.setPosition(self.model.config.corse_z_stage, self.oil_orig_z)
+
+    def _load_pos(self):
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        if (path/"scan_seq.json").exists():
+            with open(path/"scan_seq.json", "r") as file:
+                seq = MDASequence.model_validate(json.load(file))
+                pos = [pos.model_dump() for pos in seq.stage_positions]
+                self.model.scan.mda = self.model.scan.mda.replace(
+                    stage_positions=pos)
+            self.view.scan.mda.setValue(
+                self.view.scan.settings.mda)
+        if (path/"imaging_sequence.json").exists():
+            with open(path / "imaging_sequence.json", "r") as file:
+                seq = MDASequence.model_validate(json.load(file))
+                pos = [pos.model_dump() for pos in seq.stage_positions]
+                self.model.acquisition.mda = self.model.acquisition.mda.replace(
+                    stage_positions=pos)
+            self.view.acquisition.mda.setValue(
+                self.view.acquisition.settings.mda)

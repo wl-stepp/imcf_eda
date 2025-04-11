@@ -61,11 +61,6 @@ class SpatialActuator():
     def acquire(self, path=None):
         if path is None:
             path = self.save_dir / "acquisition.ome.zarr"
-        with open(self.save_dir / "imaging_sequence.json", "r") as file:
-            seq = MDASequence.model_validate(json.load(file))
-            print('loaded positions', seq.stage_positions)
-            new_seq = self.settings.acquisition.mda.replace(stage_positions=seq.stage_positions)
-            self.settings.acquisition.mda = new_seq
         if 'Dual' in self.settings.acquisition.mda.channels[0].config:
             self.mmc.setConfig(self.settings.config.camera_setting,
                                self.settings.config.camera_dual)
@@ -73,13 +68,11 @@ class SpatialActuator():
         self.acq_writer = IMCFWriter(path)
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.acquisition.parameters.objective)
-        if not Path(path).is_dir():
-            os.makedirs(path, exist_ok=True)
-        with open(path / "eda_seq.json", "w") as file:
-            file.write(self.settings.acquisition.mda.model_dump_json())
+
         time.sleep(1)
         with mda_listeners_connected(self.acq_writer,
                                      mda_events=self.mmc.mda.events):
+            print('just before acq', self.settings.acquisition.mda)
             self.mmc.mda.run(self.settings.acquisition.mda)
         with open(path / "eda_seq.json", "w") as file:
             file.write(self.settings.acquisition.mda.model_dump_json())
