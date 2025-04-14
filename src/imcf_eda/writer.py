@@ -29,8 +29,8 @@ class IMCFWriter(TensorStoreHandler):
         if 'Dual' in seq.channels[0].config:
             self.cameras = [
                 x["label"]
-                for x in meta["devices"]
-                if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
+                for x in meta.get("devices", {})
+                if x.get("type", None) == "CameraDevice" and x.get("name", None) != "Multi Camera"
             ]
         print(self.cameras)
         if len(self.cameras) > 1:

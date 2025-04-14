@@ -13,7 +13,7 @@ from useq import MDAEvent, MDASequence
 from psygnal import SignalGroup
 
 from skimage import morphology, measure, transform
-from tensorflow import keras
+import tensorflow as tf
 
 from imcf_eda.events import EventHub
 from imcf_eda.model import AnalyserSettings
@@ -37,8 +37,11 @@ class MIPAnalyser():
         self.metadatas = []
         self.sizes = {}
         self.stack = np.ndarray((1, 1, 1))
-        self.model = keras.models.load_model(
-            settings.model_path, compile=False)
+        try:
+            self.model = tf.keras.models.load_model(
+                settings.model_path, compile=False)
+        except OSError:
+            self.model = tf.saved_model.load(settings.model_path)
         self.model.predict(np.random.randint(100, 300, ((1, 256, 256, 1))))
         self.sequence = None
         self.pixel_size = None
@@ -130,8 +133,6 @@ class MIPAnalyser():
             worker.run()
         self.net_writer.sequenceFinished(self.sequence)
         self.net_writer.finalize_metadata()
-        with open(self.save_dir / "scan_seq.json", "w") as file:
-            json.dump(self.sequence.model_dump(), file)
         self.event_hub.analysis_finished.emit()
 
     def _init_from_save(self):
@@ -155,7 +156,7 @@ class MIPAnalyser():
 class MIPWorker():
     def __init__(self, mip: np.ndarray, event: MDAEvent, metadata,
                  settings: AnalyserSettings,
-                 model: keras.Model,
+                 model: tf.keras.Model,
                  event_hub: SignalGroup, writer: IMCFWriter,
                  pixel_size: float):
         self.mip = mip
@@ -166,20 +167,21 @@ class MIPWorker():
         self.event_hub = event_hub
         self.writer = writer
         self.pixel_size = pixel_size
+        self.tile_size = self.settings.tile_size
+        self.upsampling_layer = tf.keras.layers.UpSampling2D(size=(2, 2))
 
     def run(self):
         """Get the first pixel value of the passed images and return."""
+        self.n_tiles = self.mip.shape[0]//self.tile_size
         network_input = self.prepare_image(self.mip)
         network_output = self.model.predict(network_input)
-        if self.model.layers[0].input_shape[0] is None:
-            image = image[0, :, :, 0]
-        else:
-            try:
-                network_output = network_output.reshape(
-                    (9, 9, 256, 256)).swapaxes(2, 1).reshape((2304, 2304))
-            except ValueError:
-                network_output = network_output.reshape(
-                    (2, 2, 256, 256)).swapaxes(2, 1).reshape((512, 512))
+        if isinstance(network_output, list):
+            [print(x.shape) for x in network_output]
+            network_output = network_output[0]
+            network_output = np.array(self.upsampling_layer(network_output))
+        network_output = network_output.reshape(
+            (self.n_tiles, self.n_tiles, self.tile_size, self.tile_size)).swapaxes(2, 1).reshape(self.mip.shape)
+        print("After reshape:", network_output.shape)
         self.writer.frameReady(network_output, self.event, self.metadata)
         if not self.settings.mode:
             network_output = self.post_process_net_out(network_output)
@@ -200,16 +202,12 @@ class MIPWorker():
         if self.model.layers[0].input_shape[0] is None:
             image = np.expand_dims(image, [0, -1])
         else:
-            try:
-                image = image.reshape((9, 256, 9, 256)).swapaxes(
-                    1, 2).reshape((81, 256, 256))
-            except ValueError:
-                image = image.reshape((2, 256, 2, 256)).swapaxes(
-                    1, 2).reshape((4, 256, 256))
+            image = image.reshape((self.n_tiles, self.tile_size, self.n_tiles, self.tile_size)).swapaxes(
+                1, 2).reshape((self.n_tiles**2, self.tile_size, self.tile_size))
         return image
 
     def post_process_net_out(self, network_output: np.ndarray):
-        tile_size = 256
+        tile_size = self.tile_size
         border_size = 9
         # Remove the 9x9 pixel area at each intersection
         for i in range(1, 9):

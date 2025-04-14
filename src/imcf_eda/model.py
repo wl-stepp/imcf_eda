@@ -109,7 +109,9 @@ class AnalyserSettings:
     channel: Literal[analyser_channels] = settings.analyser_channels[settings.default_analyser_channel_idx]
     model_path: str = ("F:/imcf_eda/models/"
                        # "unet2d_vish_v8/weights_best.hdf5"
-                       "unet2d_vish_v4/keras_weights.hdf5")
+                       # "unet2d_vish_v4/keras_weights.hdf5"
+                       "stardist2D_vish_v3/keras.h5")
+    tile_size: int = 128
 
     def __post_init__(self):
         self.orientation: DisplaySettings = DisplaySettings()
