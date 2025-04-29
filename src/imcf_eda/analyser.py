@@ -31,6 +31,8 @@ class MIPAnalyser():
         self.save_dir = path
         self.path = path / "scan.ome.zarr"
         self.writer = IMCFWriter(self.path)
+        self.mmc.mda.events.sequenceFinished.connect(
+            self.writer.sequenceFinished)
 
         self.cameras = []
         self.events = []
@@ -112,7 +114,8 @@ class MIPAnalyser():
             json.dump(events_dict, file)
         with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "w") as file:
             json.dump(self.metadatas, file, cls=MixedEncoder)
-        self.writer.sequenceFinished(self.sequence)
+        # self.writer.sequenceFinished(self.sequence)
+        # time.sleep(2)
 
     def analyse(self):
         self.net_writer = IMCFWriter(
@@ -132,7 +135,7 @@ class MIPAnalyser():
                                self.model, self.event_hub, self.net_writer, self.pixel_size)
             worker.run()
         self.net_writer.sequenceFinished(self.sequence)
-        self.net_writer.finalize_metadata()
+        # self.net_writer.finalize_metadata()
         self.event_hub.analysis_finished.emit()
 
     def _init_from_save(self):

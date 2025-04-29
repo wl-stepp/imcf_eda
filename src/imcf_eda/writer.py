@@ -17,14 +17,6 @@ class IMCFWriter(TensorStoreHandler):
         super().__init__(path=path, delete_existing=True)
         self.cameras = []
 
-    # @property
-    # def current_sequence(self):
-    #     return self.current_sequence
-    #
-    # @current_sequence.setter
-    # def current_sequence(self, value):
-    #     self.current_sequence = value
-
     def sequenceStarted(self, seq: MDASequence, meta: SummaryMetaV1 | object = _NULL):
         if 'Dual' in seq.channels[0].config:
             self.cameras = [
@@ -60,6 +52,3 @@ class IMCFWriter(TensorStoreHandler):
         if len(self.cameras) > 1 and event.index.get('c', 0) % 2 == 1:
             frame = np.flip(frame, -2)
         super().frameReady(frame, event, meta)
-
-    def sequenceFinished(self, seq: MDASequence = _NULL) -> None:
-        super().sequenceFinished(seq)

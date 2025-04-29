@@ -110,7 +110,8 @@ class AnalyserSettings:
     model_path: str = ("F:/imcf_eda/models/"
                        # "unet2d_vish_v8/weights_best.hdf5"
                        # "unet2d_vish_v4/keras_weights.hdf5"
-                       "stardist2D_vish_v3/keras.h5")
+                       # "stardist2D_vish_v3/keras.h5"
+                       "saures_stardist2D_v17/saures_stardist2D_v17_keras.h5")
     tile_size: int = 128
 
     def __post_init__(self):
