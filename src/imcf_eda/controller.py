@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
 from qtpy.QtCore import Signal, QObject, QThread
-
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
     from imcf_eda.gui.eda import EDAGUI
@@ -17,6 +16,7 @@ import json
 from imcf_eda.actuator import SpatialActuator
 from imcf_eda.analyser import MIPAnalyser
 from imcf_eda.interpreter import PositionInterpreter
+from imcf_eda.writer import IMCFWriter
 import time
 from imcf_eda.events import EventHub
 
@@ -31,14 +31,9 @@ class Controller(QObject):
     scan_finished = Signal()
     analysis_finished = Signal()
 
-    def __init__(
-        self,
-        model: "EDASettings",
-        view: "EDAGUI",
-        mmc: "CMMCorePlus",
-        event_hub: "EventHub",
-        main_overview: "Preview" = None,
-    ):
+    def __init__(self, model: 'EDASettings', view: 'EDAGUI',
+                 mmc: 'CMMCorePlus', event_hub: 'EventHub', main_overview: 'Preview' = None
+                 ):
         super().__init__()
         self.model = model
         self.view = view
@@ -51,8 +46,11 @@ class Controller(QObject):
         self.analyser = None
         self.interpreter = None
 
-        self.fov_select = QOverview()
+        self.fov_select = QOverview(
+            fov_size=self.model.overview.parameters.fov_size)
         self.fov_select.new_fovs.connect(self.rcv_fovs)
+        self.mmc.events.XYStagePositionChanged.connect(
+            self.fov_select.overview.update_position)
 
         settings = {"rot": 0, "mirror_x": False, "mirror_y": True}
         self.preview = Preview(mmcore=self.mmc, acq=True, settings=settings)
@@ -70,37 +68,33 @@ class Controller(QObject):
         self.mmc.stopSequenceAcquisition()
         overview_mda = self.model.overview.mda
         overview_mda = overview_mda.replace(stage_positions=())
-        self.mmc.setConfig(
-            self.model.config.objective_group, self.model.overview.parameters.objective
-        )
-        self.path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
-        self.path = self.increment_path(self.path, "overview.ome.zarr")
-        self.writer = handlers.OMEZarrWriter(
-            self.path / "overview.ome.zarr", overwrite=True
-        )
+        self.mmc.setConfig(self.model.config.objective_group,
+                           self.model.overview.parameters.objective)
+        self.path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        self.path = self.increment_path(self.path, 'overview.ome.zarr')
+        self.writer = IMCFWriter(self.path / "overview.ome.zarr")
         print(overview_mda)
         self.mmc.run_mda(overview_mda, block=True, output=self.writer)
         self.fov_select.setWindowTitle("Overview")
-        self.fov_select.load_data(self.path / "overview.ome.zarr")
+        self.fov_select.load_data(
+            self.path/"overview.ome.zarr",
+            settings=self.model.overview.parameters)
         self.fov_select.show()
 
-    def rcv_fovs(self, fovs: "List[List[np.ndarray]]"):
-        print(f"{len(fovs)} FOVs received in EDA GUI")
+    def rcv_fovs(self, fovs: 'List[List[np.ndarray]]'):
+        print("FOVs received in EDA GUI")
         scan_mda = self.model.scan.mda
         all_fovs = [item for sublist in fovs for item in sublist]
         all_fovs = [(item[1], item[0]) for item in all_fovs]
         scan_mda = scan_mda.replace(stage_positions=all_fovs)
         self.view.scan.mda.setValue(scan_mda)
         self.model.scan.mda = scan_mda
-        path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
         with open(path / "scan_seq.json", "w") as file:
             json.dump(self.model.scan.mda.model_dump(), file)
+        self.view.tabs.setCurrentIndex(1)
 
     def start(self):
         if self.view.do_analyse.isChecked():
@@ -114,38 +108,40 @@ class Controller(QObject):
 
     def scan(self):
         self.mmc.stopSequenceAcquisition()
-        self.prog = MDAProgress(self.mmc)
-        path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
-        self.analyser = MIPAnalyser(self.mmc, self.event_hub, self.model.analyser, path)
-        self.interpreter = PositionInterpreter(
-            self.mmc, self.event_hub, self.model.acquisition, path
-        )
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        self.analyser = MIPAnalyser(self.mmc, self.event_hub,
+                                    self.model.analyser, path)
+        self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
+                                               acq_settings=self.model.acquisition,  path=path)
         self.actuator = SpatialActuator(
-            self.mmc, self.event_hub, self.model, self.analyser, self.interpreter, path
-        )
+            self.mmc, self.event_hub, self.model, self.analyser,
+            self.interpreter, path)
         if self.view.do_scan.isChecked():
+            self.mmc.mda.events.sequenceFinished.connect(self.scan_cleanup)
             self.actuator.scan()
-        print("SCAN ACTUATOR RETURNED")
+
+    def scan_cleanup(self, _):
+        self.mmc.mda.events.sequenceFinished.disconnect(self.scan_cleanup)
         time.sleep(1)
         self.prog.deleteLater()
         self.scan_finished.emit()
 
+    def cancel_mda(self):
+        try:
+            self.scan_finished.disconnect(self.analyse_thr)
+        except:
+            print('Analysis was not scheduled')
+
     def analyse(self):
-        path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
         if not self.analyser:
-            self.analyser = MIPAnalyser(
-                self.mmc, self.event_hub, self.model.analyser, path
-            )
+            self.analyser = MIPAnalyser(self.mmc, self.event_hub,
+                                        self.model.analyser, path)
         if not self.interpreter:
-            self.interpreter = PositionInterpreter(
-                self.mmc, self.event_hub, self.model.acquisition, path
-            )
+            self.interpreter = PositionInterpreter(self.mmc, self.event_hub,
+                                                   acq_settings=self.model.acquisition, path=path)
         self.analyser.analyse()
         self.acq_seq = self.interpreter.interpret()
         self.model.acquisition.mda = self.acq_seq
@@ -155,21 +151,18 @@ class Controller(QObject):
     def acquire(self):
         print("ACQUIRE")
         self.mmc.stopSequenceAcquisition()
-        path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
         if not self.actuator:
             self.actuator = SpatialActuator(
-                self.mmc,
-                self.event_hub,
-                self.model,
-                self.analyser,
-                self.interpreter,
-                path,
-            )
+                self.mmc, self.event_hub, self.model, self.analyser,
+                self.interpreter, path)
         self.actuator.settings.acquisition.mda = self.view.acquisition.mda.value()
+        self.mmc.mda.events.sequenceFinished.connect(self.acquire_cleanup)
         self.actuator.acquire(path / "acquisition.ome.zarr")
+
+    def acquire_cleanup(self, _):
+        self.mmc.mda.events.sequenceFinished.disconnect(self.acquire_cleanup)
         self.prog.deleteLater()
         self.actuator.reset_pos()
         if self.main_overview:
@@ -184,6 +177,7 @@ class Controller(QObject):
             self.main_overview.setWindowTitle("Scan SubChannel 1")
         # self.preview_2.setWindowTitle("Scan Channel 1")
         self.prog = MDAProgress(self.mmc)
+        self.prog.show()
         self.scan_thread = Thread(target=self.scan)
         self.scan_thread.start()
 
@@ -206,18 +200,9 @@ class Controller(QObject):
             self.main_overview.setWindowTitle("Acquisition SubChannel 1")
         # self.preview_2.setWindowTitle("Acquisition Channel 1")
         self.prog = MDAProgress(self.mmc)
+        self.prog.show()
         self.acquire_thread = Thread(target=self.acquire)
         self.acquire_thread.start()
-        try:
-            self.analysis_finished.disconnect(self.acquire_thr)
-        except TypeError:
-            pass
-
-    def cancel_mda(self):
-        try:
-            self.scan_finished.disconnect(self.analyse_thr)
-        except TypeError:
-            pass
         try:
             self.analysis_finished.disconnect(self.acquire_thr)
         except TypeError:
@@ -228,12 +213,10 @@ class Controller(QObject):
         while (path / sub_folder).is_dir():
             name = self.view.save_info.save_name.text().split(".")[0]
             n = int(self.view.save_info.save_name.text().split(".")[0][-3:])
-            name = name[:-3] + str(n + 1).zfill(3)
+            name = name[:-3] + str(n+1).zfill(3)
             self.view.save_info.save_name.setText(name)
-            path = (
-                Path(self.view.save_info.save_dir.text())
-                / self.view.save_info.save_name.text().split(".")[0]
-            )
+            path = Path(self.view.save_info.save_dir.text()) / \
+                self.view.save_info.save_name.text().split(".")[0]
         return path
 
     def live(self, objective, channel):
@@ -270,9 +253,8 @@ class Controller(QObject):
 
         self.mmc.setPosition(self.model.config.corse_z_stage, 0)
         self.mmc.setXYPosition(self.oil_orig_pos[0], 24000)
-        self.mmc.setConfig(
-            self.model.config.objective_group, self.model.scan.parameters.objective
-        )
+        self.mmc.setConfig(self.model.config.objective_group,
+                           self.model.scan.parameters.objective)
         self.prompt.okButton.clicked.connect(self.reset_position_thr)
 
     def reset_position_thr(self):
@@ -289,21 +271,21 @@ class Controller(QObject):
         self.mmc.setPosition(self.model.config.corse_z_stage, self.oil_orig_z)
 
     def _load_pos(self):
-        path = (
-            Path(self.view.save_info.save_dir.text())
-            / self.view.save_info.save_name.text().split(".")[0]
-        )
-        if (path / "scan_seq.json").exists():
-            with open(path / "scan_seq.json", "r") as file:
+        path = Path(self.view.save_info.save_dir.text()) / \
+            self.view.save_info.save_name.text().split(".")[0]
+        if (path/"scan_seq.json").exists():
+            with open(path/"scan_seq.json", "r") as file:
                 seq = MDASequence.model_validate(json.load(file))
                 pos = [pos.model_dump() for pos in seq.stage_positions]
-                self.model.scan.mda = self.model.scan.mda.replace(stage_positions=pos)
-            self.view.scan.mda.setValue(self.view.scan.settings.mda)
-        if (path / "imaging_sequence.json").exists():
+                self.model.scan.mda = self.model.scan.mda.replace(
+                    stage_positions=pos)
+            self.view.scan.mda.setValue(
+                self.view.scan.settings.mda)
+        if (path/"imaging_sequence.json").exists():
             with open(path / "imaging_sequence.json", "r") as file:
                 seq = MDASequence.model_validate(json.load(file))
                 pos = [pos.model_dump() for pos in seq.stage_positions]
                 self.model.acquisition.mda = self.model.acquisition.mda.replace(
-                    stage_positions=pos
-                )
-            self.view.acquisition.mda.setValue(self.view.acquisition.settings.mda)
+                    stage_positions=pos)
+            self.view.acquisition.mda.setValue(
+                self.view.acquisition.settings.mda)

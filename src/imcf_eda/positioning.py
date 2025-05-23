@@ -1,6 +1,7 @@
-from imcf_eda.model import AcquisitionSettings
+# from imcf_eda.model import AcquisitionSettings
 from pulp import LpMinimize, LpProblem, LpVariable, lpSum, LpBinary
 import numpy as np
+
 
 
 def cover_with_squares(points, square_size):
@@ -113,7 +114,7 @@ def cover_with_squares_min_distance(points, square_size):
     return squares
 
 import time
-def cover_with_squares_ilp(points, square_size, plot=False):
+def cover_with_squares_ilp(points, square_size, padding, plot=False):
     t0 = time.perf_counter()
     if len(points) == 0:
         print("WARNING: NO DETECTIONS")
@@ -134,9 +135,9 @@ def cover_with_squares_ilp(points, square_size, plot=False):
     print("Time after defining problem:", time.perf_counter() - t0)
     
     # Define the grid of potential square positions, but only within the bounds of the points with some padding
-    padding = square_size  # You can adjust the padding as needed
-    grid_x = np.arange(min_x - padding, max_x + padding, square_size)
-    grid_y = np.arange(min_y - padding, max_y + padding, square_size)
+    step = square_size / 100
+    grid_x = np.arange(min_x - padding - square_size/2, max_x + padding + square_size/2, step)
+    grid_y = np.arange(min_y - padding - square_size/2, max_y + padding + square_size/2, step)
     
     print("Time after making grid:", time.perf_counter() - t0)
     
@@ -151,8 +152,8 @@ def cover_with_squares_ilp(points, square_size, plot=False):
     # Constraints: each point must be covered by at least one square
     for px, py in points:
         # Precompute the potential grid squares that could cover the point (px, py)
-        possible_x = grid_x[(grid_x <= px) & (grid_x + square_size > px)]
-        possible_y = grid_y[(grid_y <= py) & (grid_y + square_size > py)]
+        possible_x = grid_x[(grid_x + padding <= px) & (grid_x + square_size - padding > px)]
+        possible_y = grid_y[(grid_y + padding <= py) & (grid_y + square_size - padding > py)]
         
         # Add a constraint that the point must be covered by at least one square
         prob += lpSum(square_vars[x][y] for x in possible_x for y in possible_y) >= 1
@@ -186,3 +187,47 @@ def plot_squares(points, square_size, squares):
     plt.title('Points and Covering Squares')
     plt.axis('equal')
     plt.show()
+
+
+if __name__ == "__main__":
+    class AcquisitionSettings:
+        min_border_distance: float = 1.
+        z_offset = 0 # 77.9
+        x_offset  = -13.2
+        y_offset  = -33.7
+        # ('100x', '10x', '25x', '40x', '4x', '60x')
+        pixel_size_config: str= '100x'
+
+        objective:  str = '100x'
+        autofocus: bool = False
+
+    # Generate example positions similar to your actual data
+    np.random.seed(42)
+    
+    # Create clustered points at coordinates similar to your data
+    clusters = [
+        (14700, 1350),  # Bottom left cluster
+        (15200, 1400),  # Bottom right cluster
+        (14900, 1700),  # Top middle cluster
+        (15200, 1600)   # Top right cluster
+    ]
+    
+    points = []
+    for cx, cy in clusters:
+        # Add 3-4 points around each cluster center
+        cluster_size = np.random.randint(3, 5)
+        cluster_points = np.random.normal(loc=[cx, cy], scale=[30, 30], size=(cluster_size, 2))
+        points.extend(cluster_points)
+    
+    # Convert to numpy array
+    points = np.array(points)
+    
+    # Parameters to try
+    square_size = 300.0  # Size of each square
+    padding = 10.0      # Minimum distance from point to square edge
+    
+    print(f"Testing with {len(points)} points")
+    print(f"Square size: {square_size}, Padding: {padding}")
+    
+    # Run the algorithm
+    squares = cover_with_squares_ilp(points, square_size, padding, plot=True)

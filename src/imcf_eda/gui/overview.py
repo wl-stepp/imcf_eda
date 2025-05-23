@@ -13,18 +13,21 @@ A: Add Polygon
 
 class Overview(InteractiveCanvas):
     def __init__(self, data: np.ndarray | None = None, scale: float = 1., pos: list | None = None,
-                 fov_size: float = 249.59):
+                 fov_size: float = 260.7):
         super().__init__()
         self.fovs = []
         self.images = []
         self.rects = []
         self.fov_size = fov_size
+        self.current = Rectangle(center=(0, 0), border_color='#00CCCC',
+                                 border_width=3,
+                                 width=self.fov_size, height=self.fov_size,
+                                 parent=self.view.scene, color=None)
         self.view.camera.aspect = 1
         # self.view.camera.
         self.text = scene.visuals.Text(HELP_TEXT, color='white', font_size=12, parent=self.canvas.scene,
                                        anchor_x="left", anchor_y="bottom")
         self.text.transform = transforms.STTransform(translate=(5, 5))
-
 
     def update_data(self, pos, data, scale):
         print("UPDATING DATA")
@@ -34,13 +37,13 @@ class Overview(InteractiveCanvas):
         for this_pos, data in zip(pos, data):
             clims = (data.min(), data.max())
             self.images.append(scene.visuals.Image(data, parent=self.view.scene,
-                                                    cmap='grays', clim=clims))
+                                                   cmap='grays', clim=clims))
             trans = transforms.linear.MatrixTransform()
             trans.rotate(-90, (0, 0, 1))
             trans.scale((-scale[0], scale[1]))
             trans.translate([this_pos[1] + data.shape[1]*scale[0]/2,
                              this_pos[0] + data.shape[0]*scale[1]/2,
-                                10])
+                             10])
             self.images[-1].transform = trans
 
         min_x = min([x[1] - data.shape[0]*abs(scale[0]/2) for x in pos])
@@ -50,8 +53,14 @@ class Overview(InteractiveCanvas):
         self.view.camera.rect = [min_x, min_y, max_x-min_x, max_y-min_y]
 
     def update_fov_size(self, fov_size):
-        #TODO implement this to change when the objective in the scan settings change
+        # TODO implement this to change when the objective in the scan settings change
         self.fov_size = fov_size
+        self.current.width = fov_size
+        self.current.height = fov_size
+
+    def update_position(self, stage, x, y):
+        pos = (y, x)
+        self.current.center = pos
 
     def reset_images(self):
         for image in self.images:
@@ -97,7 +106,6 @@ if __name__ == "__main__":
     import pathlib
     import json
 
-    
     canvas = Overview()
     run()
 

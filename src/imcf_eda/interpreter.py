@@ -9,15 +9,15 @@ from pymmcore_plus import CMMCorePlus
 from psygnal import SignalGroup
 # For solving the positions
 from imcf_eda.positioning import cover_with_squares_ilp
-from imcf_eda.model import AcquisitionMDASettings
+from imcf_eda.model import AcquisitionMDASettings, AnalyserSettings
 
 
 class PositionInterpreter():
     def __init__(self, mmc: CMMCorePlus, event_hub: SignalGroup,
-                 settings: AcquisitionMDASettings, path: Path):
+                 acq_settings: AcquisitionMDASettings, path: Path):
         self.mmc = mmc
-        self.mda = settings.mda
-        self.settings = settings.parameters
+        self.mda = acq_settings.mda
+        self.settings = acq_settings.parameters
         self.save_dir = path
 
         self.positions = []
@@ -51,15 +51,15 @@ class PositionInterpreter():
             write.writerow(['index', 'axis-0', 'axis-1'])
             write.writerows(csv_pos)
         print("OPTIMIZING POSITIONS...")
-        pos = [[i['x'] - float(self.settings.x_offset) for i in self.positions],
+        pos = [[i['x'] + float(self.settings.x_offset) for i in self.positions],
                 [i['y'] - float(self.settings.y_offset)for i in self.positions]]
         print("Positions:", len(pos[0]))
         fov_size = self.mmc.getPixelSizeUmByID(
             self.settings.pixel_size_config)*self.mmc.getImageWidth()
         print("FOV", fov_size)
         squares = cover_with_squares_ilp(np.asarray(pos).T,
-                                         (fov_size -
-                                         self.settings.min_border_distance*2),
+                                         fov_size,
+                                         padding = self.settings.min_border_distance,
                                          plot=False)
 
         z = self.mmc.getPosition() + self.settings.z_offset

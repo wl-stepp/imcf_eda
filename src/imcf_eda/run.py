@@ -12,13 +12,13 @@ if __name__ == "__main__":
     import sys
     from pymmcore_plus import CMMCorePlus
     from qtpy.QtWidgets import QApplication
-    from imcf_eda.convenience import init_microscope
+    from imcf_eda.convenience import init_microscope, set_dark
     app = QApplication([])
+    set_dark(app)
     mmc = CMMCorePlus().instance()
     mmc.setDeviceAdapterSearchPaths(["/opt/micro-manager/"] +
                                     list(mmc.getDeviceAdapterSearchPaths()))
     print("ARGUMENT", sys.argv[1])
-    print(sys.argv[1] == "demo")
     if sys.argv[1] == "demo":
         init_microscope(mmc, None)
 
@@ -77,6 +77,7 @@ if __name__ == "__main__":
                             settings.overview.mda.channels[0].exposure)
         except:
             print("Exposure could not be set, set manually")
-        adjust_demo_config(mmc)
+        if sys.argv[1] == "demo":
+            adjust_demo_config(mmc)
 
     app.exec_()  # type: ignore

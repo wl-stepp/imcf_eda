@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from pydantic import BaseModel
 from pathlib import Path
+import tensorflow as tf
 
 from pymmcore_plus.metadata.schema import FrameMetaV1
 
@@ -13,7 +16,6 @@ from useq import MDAEvent, MDASequence
 from psygnal import SignalGroup
 
 from skimage import morphology, measure, transform
-import tensorflow as tf
 
 from imcf_eda.events import EventHub
 from imcf_eda.model import AnalyserSettings
@@ -31,8 +33,8 @@ class MIPAnalyser():
         self.save_dir = path
         self.path = path / "scan.ome.zarr"
         self.writer = IMCFWriter(self.path)
-        self.mmc.mda.events.sequenceFinished.connect(
-            self.writer.sequenceFinished)
+        # self.mmc.mda.events.sequenceFinished.connect(
+        #     self.writer.sequenceFinished)
 
         self.cameras = []
         self.events = []
@@ -101,7 +103,7 @@ class MIPAnalyser():
         self.sizes = sequence.sizes
         self.pixel_size = self.mmc.getPixelSizeUm()
         # TODO, somehow we get pixel size 0.072 here...
-        self.pixel_size = 0.108
+        self.pixel_size = 0.11315
         print("PIXEL SIZE", self.pixel_size)
         self.stack = np.zeros((max(1, self.sizes.get('c', 1)),
                                max(1, self.sizes.get('z', 1)),
@@ -109,12 +111,13 @@ class MIPAnalyser():
                                self.mmc.getImageWidth()), dtype=np.uint16)
 
     def sequenceFinished(self):
+        print("Writing analyser events")
         events_dict = [event.model_dump() for event in self.events]
         with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "w") as file:
             json.dump(events_dict, file)
         with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "w") as file:
             json.dump(self.metadatas, file, cls=MixedEncoder)
-        # self.writer.sequenceFinished(self.sequence)
+        self.writer.sequenceFinished(self.sequence)
         # time.sleep(2)
 
     def analyse(self):
@@ -139,8 +142,16 @@ class MIPAnalyser():
         self.event_hub.analysis_finished.emit()
 
     def _init_from_save(self):
-        with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "r") as file:
-            events_dict = json.load(file)
+        loaded = False
+        while not loaded:
+            try:
+                with open(self.save_dir/"scan.ome.zarr/analyser_events.json", "r") as file:
+                    events_dict = json.load(file)
+                loaded = True
+            except FileNotFoundError:
+                print("events not written yet, retry")
+                time.sleep(1)
+
         self.events = [MDAEvent.model_validate(
             event_data) for event_data in events_dict]
         with open(self.save_dir/"scan.ome.zarr/analyser_metadatas.json", "r") as file:
@@ -148,12 +159,12 @@ class MIPAnalyser():
             self.metadatas = json.load(file, object_hook=mixed_decoder(models))
 
         if not self.sequence:
-            with open(self.save_dir/"scan.ome.zarr/eda_seq.json", "r") as file:
+            with open(self.save_dir/"scan_seq.json", "r") as file:
                 self.sequence = MDASequence.model_validate(json.load(file))
             self.metadata = self.sequence.metadata
             self.sizes = self.sequence.sizes
         if not self.pixel_size:
-            self.pixel_size = 0.108
+            self.pixel_size = 0.11315
 
 
 class MIPWorker():
@@ -184,7 +195,6 @@ class MIPWorker():
             network_output = np.array(self.upsampling_layer(network_output))
         network_output = network_output.reshape(
             (self.n_tiles, self.n_tiles, self.tile_size, self.tile_size)).swapaxes(2, 1).reshape(self.mip.shape)
-        print("After reshape:", network_output.shape)
         self.writer.frameReady(network_output, self.event, self.metadata)
         if not self.settings.mode:
             network_output = self.post_process_net_out(network_output)
@@ -193,7 +203,6 @@ class MIPWorker():
                            self.settings.threshold] = 0
             network_output[network_output >=
                            self.settings.threshold] = 1
-        print('max network value:', network_output.max())
         positions = self.get_positions(network_output)
         self.event_hub.new_positions.emit(positions, self.pixel_size)
 
@@ -234,12 +243,15 @@ class MIPWorker():
         """Return the positions of the detected objects."""
         network_output = transform.rotate(network_output,
                                           self.settings.orientation.rotation)
+
+        # SIMULATION
+        # if np.random.random() < 0.95:
+        #     network_output = np.zeros_like(network_output)
+
         if self.settings.orientation.flipud:
             network_output = np.flipud(network_output)
         if self.settings.orientation.fliplr:
             network_output = np.fliplr(network_output)
-        print('getting positions', network_output.max())
-        print('min', network_output.min())
         label_image, _ = measure.label(network_output, connectivity=2,
                                        return_num=True)
 

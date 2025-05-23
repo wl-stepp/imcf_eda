@@ -4,10 +4,8 @@ import numpy as np
 import zarr
 from qtpy.QtWidgets import (QTabWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                             QWidget, QCheckBox)
-import os
 from qtpy.QtCore import Signal  # type:ignore
 from qtpy.QtGui import QFont
-from useq import MDASequence
 
 from imcf_eda.gui._qt_classes import QWidgetRestore, set_dark
 from imcf_eda.gui.overview import Overview
@@ -16,10 +14,9 @@ from pymmcore_widgets import LiveButton
 from pymmcore_widgets.mda._save_widget import SaveGroupBox
 from pymmcore_plus import CMMCorePlus
 from imcf_eda.model import (EDASettings, OverviewMDASettings, ScanMDASettings,
-                            AcquisitionMDASettings, AnalyserSettings)
+                            AcquisitionMDASettings, AnalyserSettings, OverviewSettings)
 from imcf_eda.events import EventHub
 from dataclasses import asdict
-from superqt.utils import signals_blocked
 
 
 class OverviewGUI(QWidget):
@@ -171,10 +168,13 @@ class EDAGUI(QWidgetRestore):
 
         self.modes_lay = QVBoxLayout()
         self.do_scan = QCheckBox('Scan')
+        self.do_scan.setChecked(True)
         self.modes_lay.addWidget(self.do_scan)
         self.do_analyse = QCheckBox('Analyse')
+        self.do_analyse.setChecked(True)
         self.modes_lay.addWidget(self.do_analyse)
         self.do_acquire = QCheckBox('Acquire')
+        self.do_acquire.setChecked(True)
         self.modes_lay.addWidget(self.do_acquire)
 
         self.lay = QVBoxLayout()
@@ -197,9 +197,9 @@ class EDAGUI(QWidgetRestore):
 class QOverview(QWidgetRestore):
     new_fovs = Signal(list)
 
-    def __init__(self, data_dir=None):
+    def __init__(self, data_dir=None, fov_size: float = 260.7):
         super().__init__()
-        self.overview = Overview()
+        self.overview = Overview(fov_size=fov_size)
         self.lay = QVBoxLayout()
         self.setLayout(self.lay)
         self.lay.addWidget(self.overview.canvas.native)
@@ -211,22 +211,24 @@ class QOverview(QWidgetRestore):
             self.super_update_fovs()
             self.new_fovs.emit(self.overview.fovs)
 
-    def load_data(self, data_dir):
-        with open(pathlib.Path(data_dir) / "p0/.zattrs", "r") as file:
+    def load_data(self, data_dir: pathlib.Path, settings: OverviewSettings):
+        with open(pathlib.Path(data_dir) / ".zattrs", "r") as file:
             metadata = json.load(file)
-        zarr_data = zarr.open(data_dir/"p0", mode='r')
+        zarr_data = zarr.open(data_dir, mode='r')
         # Convert to numpy array (if needed, this will depend on how the Zarr array is structured)
         data = np.array(zarr_data)
+        print(metadata)
         print(data.shape)
-        scale = [metadata["frame_meta"][0]["pixel_size_um"],
-                 metadata["frame_meta"][0]["pixel_size_um"]]
+        scale = [metadata["frame_metadatas"][0]["pixel_size_um"],
+                 metadata["frame_metadatas"][0]["pixel_size_um"]]
         print(scale)
         if len(data.shape) == 4:
             shape = data.shape
         else:
             shape = [1]
-        pos = [(metadata["frame_meta"][i]['position']['x'],
-                metadata["frame_meta"][i]['position']['y']) for i in range(shape[0])]
+        # The offset directions here might be wrong
+        pos = [(metadata["frame_metadatas"][i]['position']['x'] + settings.x_offset,
+                metadata["frame_metadatas"][i]['position']['y'] + settings.y_offset) for i in range(shape[0])]
         print(pos)
         if len(data.shape) == 4:
             data = data[:, 0, :, :]

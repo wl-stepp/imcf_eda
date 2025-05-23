@@ -21,6 +21,7 @@ class SpatialActuator():
         self.analyser = analyser
         self.interpreter = interpreter
         self.save_dir = path
+        self.path = None
 
         self.orig_pos = self.mmc.getXYPosition()
         self.orig_pos_z = self.mmc.getPosition()
@@ -42,42 +43,52 @@ class SpatialActuator():
         self.orig_pos = self.mmc.getXYPosition()
         self.orig_pos_z = self.mmc.getPosition()
 
-        # positions = self.settings.scan.mda.stage_positions
-        # self.settings.scan.mda.replace()
+        positions = self.settings.scan.mda.stage_positions
+        new_positions = []
+        for position in positions:
+            new_positions.append({'x': position.x, 'y': position.y, 'z': self.orig_pos_z})
+        self.settings.scan.mda.replace(stage_positions=new_positions)
+        
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.scan.parameters.objective)
         time.sleep(0.5)
-        with mda_listeners_connected(self.analyser, self.interpreter,
-                                     mda_events=self.mmc.mda.events):
-            print("Running Scan")
-            self.mmc.mda.run(self.settings.scan.mda)
+        self.mmc.mda.events.sequenceFinished.connect(self.scan_cleanup)
+
+        self.mmc.run_mda(self.settings.scan.mda, output=self.analyser)
+
+
+    def scan_cleanup(self, _):
+        self.mmc.mda.events.sequenceFinished.disconnect(self.scan_finished)
         with open(self.save_dir / "scan.ome.zarr/eda_seq.json", "w") as file:
             json.dump(self.settings.scan.mda.model_dump(), file)
         print("Going back to z", self.orig_pos_z)
         self.mmc.setPosition(self.orig_pos_z)
-        #  while not self.analysis_done:
-        #     pass
+    
 
     def acquire(self, path=None):
+        self.path = path
         if path is None:
-            path = self.save_dir / "acquisition.ome.zarr"
+            self.path = self.save_dir / "acquisition.ome.zarr"
         if 'Dual' in self.settings.acquisition.mda.channels[0].config:
             self.mmc.setConfig(self.settings.config.camera_setting,
                                self.settings.config.camera_dual)
 
-        self.acq_writer = IMCFWriter(path)
+        self.acq_writer = IMCFWriter(self.path)
         self.mmc.setConfig(self.settings.config.objective_group,
                            self.settings.acquisition.parameters.objective)
-
         time.sleep(1)
-        with mda_listeners_connected(self.acq_writer,
-                                     mda_events=self.mmc.mda.events):
-            print('just before acq', self.settings.acquisition.mda)
-            self.mmc.mda.run(self.settings.acquisition.mda)
-        with open(path / "eda_seq.json", "w") as file:
+        self.mmc.mda.events.sequenceFinished.connect(self.acquire_cleanup)
+        self.mmc.mda.events.sequenceCanceled.connect(self.acquire_cleanup)
+        self.mmc.run_mda(self.settings.acquisition.mda, output=self.acq_writer)
+
+    def acquire_cleanup(self, _):
+        self.mmc.mda.events.sequenceFinished.disconnect(self.acquire_cleanup)
+        self.mmc.mda.events.sequenceCanceled.disconnect(self.acquire_cleanup)
+        with open(self.path / "eda_seq.json", "w") as file:
             file.write(self.settings.acquisition.mda.model_dump_json())
         self.acq_writer.finalize_metadata()
         self.analysis_done = False
+
 
     def reset_pos(self):
         self.mmc.setPosition(self.orig_pos_z)
